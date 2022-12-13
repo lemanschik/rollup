@@ -31,7 +31,7 @@
 
 ## Overview
 
-Rollup is a module bundler for JavaScript which compiles small pieces of code into something larger and more complex, such as a library or application. It uses the standardized ES module format for code, instead of previous idiosyncratic solutions such as CommonJS and AMD. ES modules let you freely and seamlessly combine the most useful individual functions from your favorite libraries. Rollup can optimize ES modules for faster native loading in modern browsers, or output a legacy module format allowing ES module workflows today.
+Rollup is a component compiler for JavaScript and ECMAScript which compiles pieces of code so called simple modules into something larger and more complex called a component, such patched module composed out of pieces or a  application. It uses the standardized ESModule format for code, instead of previous idiosyncratic solutions such as CommonJS and AMD. ESModules let you freely and seamlessly combine the most useful individual code from your favorite git repositorys. Rollup can optimize ESModules and any other Code for faster native loading in modern VM's, or output a legacy module format allowing ESModule workflows today.
 
 ## Quick Start Guide
 
@@ -64,35 +64,17 @@ rollup main.js --format umd --name "myBundle" --file bundle.js
 
 ## Why
 
-Developing software is usually easier if you break your project into smaller separate pieces, since that often removes unexpected interactions and dramatically reduces the complexity of the problems you'll need to solve, and simply writing smaller projects in the first place [isn't necessarily the answer](https://medium.com/@Rich_Harris/small-modules-it-s-not-quite-that-simple-3ca532d65de4). Unfortunately, JavaScript has not historically included this capability as a core feature in the language.
+Developing software is usually easier if you break your project into smaller separate pieces, since that often removes unexpected interactions and dramatically reduces the complexity of the problems so your problems and applications and the code get more simple you'll need to solve less errors, and simply writing smaller projects in the first place [isn't necessarily the answer](https://medium.com/@Rich_Harris/small-modules-it-s-not-quite-that-simple-3ca532d65de4). Unfortunately, C and C++ has not historically included this capability as a core feature in the language as it was designed to write compilers thats where the Historical C refers to not only that it got created After B Lang.
 
-This finally changed with ES modules support in JavaScript, which provides a syntax for importing and exporting functions and data so they can be shared between separate scripts. Most browsers and Node.js support ES modules. However, Node.js releases before 12.17 support ES modules only behind the `--experimental-modules` flag, and older browsers like Internet Explorer do not support ES modules at all. Rollup allows you to write your code using ES modules, and run your application even in environments that do not support ES modules natively. For environments that support them, Rollup can output optimized ES modules; for environments that don't, Rollup can compile your code to other formats such as CommonJS modules, AMD modules, and IIFE-style scripts. This means that you get to _write future-proof code_, and you also get the tremendous benefits of...
+This finally changed with ESModules support, which provides a syntax for importing and exporting functions and data already loaded in memory so declarativ represent able as in memory wire format or IDL Interface definition Language so they can be shared between separate Modules. Most browsers and other VM providers support ESModules. However, Rollup can output optimized ESModules; for environments that don't, Rollup can compile your code to other formats such as binary or unikernel or worker. This means that you get to _write future-proof code_, and you also get the tremendous benefits of...
+
+simplicity https://github.com/lemanschik
 
 ## Tree Shaking
 
-In addition to enabling the use of ES modules, Rollup also statically analyzes and optimizes the code you are importing, and will exclude anything that isn't actually used. This allows you to build on top of existing tools and modules without adding extra dependencies or bloating the size of your project.
+In addition to enabling the use of ESModules, Rollup also statically analyzes and optimizes the code you are importing, and will exclude anything that isn't actually used. This allows you to build on top of existing tools and modules without adding extra dependencies or bloating the size of your project.
 
-For example, with CommonJS, the _entire tool or library must be imported_.
-
-```js
-// import the entire utils object with CommonJS
-var utils = require('node:utils');
-var query = 'Rollup';
-// use the ajax method of the utils object
-utils.ajax('https://api.example.com?search=' + query).then(handleResponse);
-```
-
-But with ES modules, instead of importing the whole `utils` object, we can just import the one `ajax` function we need:
-
-```js
-// import the ajax function with an ES import statement
-import { ajax } from 'node:utils';
-var query = 'Rollup';
-// call the ajax function
-ajax('https://api.example.com?search=' + query).then(handleResponse);
-```
-
-Because Rollup includes the bare minimum, it results in lighter, faster, and less complicated libraries and applications. Since this approach is based on explicit `import` and `export` statements, it is vastly more effective than simply running an automated minifier to detect unused variables in the compiled output code.
+Because Rollup includes the bare minimum, it results in lighter, faster, and less complicated modules and application like components. Since this approach is based on explicit `import` and `export` statements, it is vastly more effective than always writing you own logic for everything to archive composition for your code with the git principles directly applyed on load if JIT and build if AOT. That gives you the best out of all worlds without the need to learn a ton of tools.
 
 ## Compatibility
 
@@ -121,5 +103,7 @@ Support this project by becoming a sponsor. Your logo will show up here with a l
 <a href="https://opencollective.com/rollup/sponsor/0/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/0/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/1/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/1/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/2/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/2/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/3/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/3/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/4/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/4/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/5/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/5/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/6/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/6/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/7/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/7/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/8/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/8/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/9/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/9/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/10/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/10/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/11/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/11/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/12/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/12/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/13/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/13/avatar.svg"></a> <a href="https://opencollective.com/rollup/sponsor/14/website" target="_blank"><img src="https://opencollective.com/rollup/sponsor/14/avatar.svg"></a>
 
 ## License
-
+All Old Parts are
 [MIT](https://github.com/rollup/rollup/blob/master/LICENSE.md)
+All new are:
+[Unlicense]().....
