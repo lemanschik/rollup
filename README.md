@@ -31,7 +31,7 @@
 
 ## Overview
 
-Rollup is a component compiler for JavaScript and ECMAScript which compiles pieces of code so called simple modules into something larger and more complex called a component, such patched module composed out of pieces or a  application. It uses the standardized ESModule format for code, instead of previous idiosyncratic solutions such as CommonJS and AMD. ESModules let you freely and seamlessly combine the most useful individual code from your favorite git repositorys. Rollup can optimize ESModules and any other Code for faster native loading in modern VM's, or output a legacy module format allowing ESModule workflows today.
+Rollup is a component compiler for JavaScript and ECMAScript which compiles pieces of code so called simple modules into something larger and more complex called a component, such patched module composed out of pieces or a  application. It uses the standardized ESModule format for code, instead of previous idiosyncratic solutions such as Makefiles, usage of legacy build systems and macros in rust become obsolete. ESModules let you freely and seamlessly combine the most useful individual code from your favorite git repositorys. Rollup can optimize ESModules and any other Code for faster native loading in modern VM's, or output a legacy module format allowing ESModule workflows today.
 
 ## Quick Start Guide
 
