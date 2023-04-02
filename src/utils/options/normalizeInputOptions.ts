@@ -14,6 +14,14 @@ import { error, errorInvalidOption, warnDeprecationWithOptions } from '../error'
 import { resolve } from '../path';
 import relativeId from '../relativeId';
 import {
+	URL_MAXPARALLELFILEOPS,
+	URL_OUTPUT_INLINEDYNAMICIMPORTS,
+	URL_OUTPUT_MANUALCHUNKS,
+	URL_OUTPUT_PRESERVEMODULES,
+	URL_TREESHAKE,
+	URL_TREESHAKE_MODULESIDEEFFECTS
+} from '../urls';
+import {
 	defaultOnWarn,
 	getOptionWithPreset,
 	normalizePluginOption,
@@ -45,6 +53,7 @@ export async function normalizeInputOptions(config: InputOptions): Promise<{
 		cache: getCache(config),
 		context,
 		experimentalCacheExpiry: config.experimentalCacheExpiry ?? 10,
+		experimentalLogSideEffects: config.experimentalLogSideEffects || false,
 		external: getIdMatcher(config.external),
 		inlineDynamicImports: getInlineDynamicImports(config, onwarn, strictDeprecations),
 		input: getInput(config),
@@ -96,9 +105,7 @@ const getOnwarn = (config: InputOptions): NormalizedInputOptions['onwarn'] => {
 };
 
 const getAcorn = (config: InputOptions): acorn.Options => ({
-	allowAwaitOutsideFunction: true,
 	ecmaVersion: 'latest',
-	preserveParens: false,
 	sourceType: 'module',
 	...config.acorn
 });
@@ -111,7 +118,9 @@ const getAcornInjectPlugins = (
 ];
 
 const getCache = (config: InputOptions): NormalizedInputOptions['cache'] =>
-	(config.cache as unknown as RollupBuild)?.cache || config.cache;
+	config.cache === true // `true` is the default
+		? undefined
+		: (config.cache as unknown as RollupBuild)?.cache || config.cache;
 
 const getIdMatcher = <T extends Array<any>>(
 	option:
@@ -152,6 +161,7 @@ const getInlineDynamicImports = (
 	if (configInlineDynamicImports) {
 		warnDeprecationWithOptions(
 			'The "inlineDynamicImports" option is deprecated. Use the "output.inlineDynamicImports" option instead.',
+			URL_OUTPUT_INLINEDYNAMICIMPORTS,
 			true,
 			warn,
 			strictDeprecations
@@ -174,6 +184,7 @@ const getManualChunks = (
 	if (configManualChunks) {
 		warnDeprecationWithOptions(
 			'The "manualChunks" option is deprecated. Use the "output.manualChunks" option instead.',
+			URL_OUTPUT_MANUALCHUNKS,
 			true,
 			warn,
 			strictDeprecations
@@ -191,6 +202,7 @@ const getmaxParallelFileOps = (
 	if (typeof maxParallelFileReads === 'number') {
 		warnDeprecationWithOptions(
 			'The "maxParallelFileReads" option is deprecated. Use the "maxParallelFileOps" option instead.',
+			URL_MAXPARALLELFILEOPS,
 			true,
 			warn,
 			strictDeprecations
@@ -208,19 +220,18 @@ const getModuleContext = (
 	config: InputOptions,
 	context: string
 ): NormalizedInputOptions['moduleContext'] => {
-	const configModuleContext = config.moduleContext as
-		| ((id: string) => string | null | undefined)
-		| { [id: string]: string }
-		| undefined;
+	const configModuleContext = config.moduleContext;
 	if (typeof configModuleContext === 'function') {
 		return id => configModuleContext(id) ?? context;
 	}
 	if (configModuleContext) {
-		const contextByModuleId = Object.create(null);
+		const contextByModuleId: {
+			[key: string]: string;
+		} = Object.create(null);
 		for (const [key, moduleContext] of Object.entries(configModuleContext)) {
 			contextByModuleId[resolve(key)] = moduleContext;
 		}
-		return id => contextByModuleId[id] || context;
+		return id => contextByModuleId[id] ?? context;
 	}
 	return () => context;
 };
@@ -234,6 +245,7 @@ const getPreserveModules = (
 	if (configPreserveModules) {
 		warnDeprecationWithOptions(
 			'The "preserveModules" option is deprecated. Use the "output.preserveModules" option instead.',
+			URL_OUTPUT_PRESERVEMODULES,
 			true,
 			warn,
 			strictDeprecations
@@ -251,6 +263,7 @@ const getTreeshake = (config: InputOptions): NormalizedInputOptions['treeshake']
 		config.treeshake,
 		treeshakePresets,
 		'treeshake',
+		URL_TREESHAKE,
 		'false, true, '
 	);
 	return {
@@ -281,7 +294,7 @@ const getHasModuleSideEffects = (
 	}
 	if (typeof moduleSideEffectsOption === 'function') {
 		return (id, external) =>
-			!id.startsWith('\0') ? moduleSideEffectsOption(id, external) !== false : true;
+			id.startsWith('\0') ? true : moduleSideEffectsOption(id, external) !== false;
 	}
 	if (Array.isArray(moduleSideEffectsOption)) {
 		const ids = new Set(moduleSideEffectsOption);
@@ -291,7 +304,7 @@ const getHasModuleSideEffects = (
 		error(
 			errorInvalidOption(
 				'treeshake.moduleSideEffects',
-				'treeshake',
+				URL_TREESHAKE_MODULESIDEEFFECTS,
 				'please use one of false, "no-external", a function or an array'
 			)
 		);

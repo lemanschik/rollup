@@ -24,10 +24,16 @@ import { getGenerateCodeSnippets } from './utils/generateCodeSnippets';
 import type { HashPlaceholderGenerator } from './utils/hashPlaceholders';
 import { getHashPlaceholderGenerator } from './utils/hashPlaceholders';
 import type { OutputBundleWithPlaceholders } from './utils/outputBundle';
-import { getOutputBundle } from './utils/outputBundle';
+import { getOutputBundle, removeUnreferencedAssets } from './utils/outputBundle';
 import { isAbsolute } from './utils/path';
 import { renderChunks } from './utils/renderChunks';
 import { timeEnd, timeStart } from './utils/timers';
+import {
+	URL_OUTPUT_AMD_ID,
+	URL_OUTPUT_DIR,
+	URL_OUTPUT_FORMAT,
+	URL_OUTPUT_SOURCEMAPFILE
+} from './utils/urls';
 
 export default class Bundle {
 	private readonly facadeChunkByModule = new Map<Module, Chunk>();
@@ -78,6 +84,8 @@ export default class Bundle {
 			await this.pluginDriver.hookParallel('renderError', [error_]);
 			throw error_;
 		}
+
+		removeUnreferencedAssets(outputBundle);
 
 		timeStart('generate bundle', 2);
 
@@ -142,7 +150,6 @@ export default class Bundle {
 				if ('code' in file) {
 					try {
 						this.graph.contextParse(file.code, {
-							allowHashBang: true,
 							ecmaVersion: 'latest'
 						});
 					} catch (error_: any) {
@@ -222,7 +229,7 @@ function validateOptionsForMultiChunkOutput(
 		return error(
 			errorInvalidOption(
 				'output.format',
-				'outputformat',
+				URL_OUTPUT_FORMAT,
 				'UMD and IIFE output formats are not supported for code-splitting builds',
 				outputOptions.format
 			)
@@ -231,7 +238,7 @@ function validateOptionsForMultiChunkOutput(
 		return error(
 			errorInvalidOption(
 				'output.file',
-				'outputdir',
+				URL_OUTPUT_DIR,
 				'when building multiple chunks, the "output.dir" option must be used, not "output.file". To inline dynamic imports, set the "inlineDynamicImports" option'
 			)
 		);
@@ -239,7 +246,7 @@ function validateOptionsForMultiChunkOutput(
 		return error(
 			errorInvalidOption(
 				'output.sourcemapFile',
-				'outputsourcemapfile',
+				URL_OUTPUT_SOURCEMAPFILE,
 				'"output.sourcemapFile" is only supported for single-file builds'
 			)
 		);
@@ -247,7 +254,7 @@ function validateOptionsForMultiChunkOutput(
 		onWarn(
 			errorInvalidOption(
 				'output.amd.id',
-				'outputamd',
+				URL_OUTPUT_AMD_ID,
 				'this option is only properly supported for single-file builds. Use "output.amd.autoId" and "output.amd.basePath" instead'
 			)
 		);
@@ -267,7 +274,7 @@ function getIncludedModules(modulesById: ReadonlyMap<string, Module | ExternalMo
 }
 
 function getAbsoluteEntryModulePaths(
-	includedModules: Module[],
+	includedModules: readonly Module[],
 	preserveModules: boolean
 ): string[] {
 	const absoluteEntryModulePaths: string[] = [];

@@ -133,15 +133,24 @@ export class PluginDriver {
 		replaceContext?: ReplaceContext | null,
 		skipped?: ReadonlySet<Plugin> | null
 	): Promise<ReturnType<FunctionPluginHooks[H]> | null> {
-		let promise: Promise<ReturnType<FunctionPluginHooks[H]> | null> = Promise.resolve(null);
+		return this.hookFirstAndGetPlugin(hookName, parameters, replaceContext, skipped).then(
+			result => result && result[0]
+		);
+	}
+
+	// chains, first non-null result stops and returns result and last plugin
+	async hookFirstAndGetPlugin<H extends AsyncPluginHooks & FirstPluginHooks>(
+		hookName: H,
+		parameters: Parameters<FunctionPluginHooks[H]>,
+		replaceContext?: ReplaceContext | null,
+		skipped?: ReadonlySet<Plugin> | null
+	): Promise<[NonNullable<ReturnType<FunctionPluginHooks[H]>>, Plugin] | null> {
 		for (const plugin of this.getSortedPlugins(hookName)) {
-			if (skipped && skipped.has(plugin)) continue;
-			promise = promise.then(result => {
-				if (result != null) return result;
-				return this.runHook(hookName, parameters, plugin, replaceContext);
-			});
+			if (skipped?.has(plugin)) continue;
+			const result = await this.runHook(hookName, parameters, plugin, replaceContext);
+			if (result != null) return [result, plugin];
 		}
-		return promise;
+		return null;
 	}
 
 	// chains synchronously, first non-null result stops and returns
@@ -306,7 +315,7 @@ export class PluginDriver {
 		replaceContext?: ReplaceContext | null
 	): Promise<unknown> {
 		// We always filter for plugins that support the hook before running it
-		const hook = plugin[hookName]!;
+		const hook = plugin[hookName];
 		const handler = typeof hook === 'object' ? hook.handler : hook;
 
 		let context = this.pluginContexts.get(plugin)!;

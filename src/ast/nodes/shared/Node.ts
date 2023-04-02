@@ -4,6 +4,7 @@ import type MagicString from 'magic-string';
 import type { AstContext } from '../../../Module';
 import { ANNOTATION_KEY, INVALID_COMMENT_KEY } from '../../../utils/pureComments';
 import type { NodeRenderOptions, RenderOptions } from '../../../utils/renderHelpers';
+import type { DeoptimizableEntity } from '../../DeoptimizableEntity';
 import type { Entity } from '../../Entity';
 import {
 	createHasEffectsContext,
@@ -31,7 +32,7 @@ export interface Node extends Entity {
 	annotations?: acorn.Comment[];
 	context: AstContext;
 	end: number;
-	esTreeNode: GenericEsTreeNode;
+	esTreeNode: GenericEsTreeNode | null;
 	included: boolean;
 	keys: string[];
 	needsBoundaries?: boolean;
@@ -113,13 +114,20 @@ export interface Node extends Entity {
 
 export type StatementNode = Node;
 
-export interface ExpressionNode extends ExpressionEntity, Node {}
+export interface ExpressionNode extends ExpressionEntity, Node {
+	isSkippedAsOptional?(origin: DeoptimizableEntity): boolean;
+}
+
+export interface ChainElement extends ExpressionNode {
+	optional: boolean;
+	isSkippedAsOptional(origin: DeoptimizableEntity): boolean;
+}
 
 export class NodeBase extends ExpressionEntity implements ExpressionNode {
 	declare annotations?: acorn.Comment[];
 	context: AstContext;
 	declare end: number;
-	esTreeNode: acorn.Node;
+	esTreeNode: acorn.Node | null;
 	keys: string[];
 	parent: Node | { context: AstContext; type: string };
 	declare scope: ChildScope;
@@ -140,10 +148,13 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 	constructor(
 		esTreeNode: GenericEsTreeNode,
 		parent: Node | { context: AstContext; type: string },
-		parentScope: ChildScope
+		parentScope: ChildScope,
+		keepEsTreeNode = false
 	) {
 		super();
-		this.esTreeNode = esTreeNode;
+		// Nodes can opt-in to keep the AST if needed during the build pipeline.
+		// Avoid true when possible as large AST takes up memory.
+		this.esTreeNode = keepEsTreeNode ? esTreeNode : null;
 		this.keys = keys[esTreeNode.type] || getAndCreateKeys(esTreeNode);
 		this.parent = parent;
 		this.context = parent.context;
@@ -160,8 +171,8 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 	): void {}
 
 	/**
-	 * Override this to bind assignments to variables and do any initialisations that
-	 * require the scopes to be populated with variables.
+	 * Override this to bind assignments to variables and do any initialisations
+	 * that require the scopes to be populated with variables.
 	 */
 	bind(): void {
 		for (const key of this.keys) {
@@ -177,7 +188,8 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 	}
 
 	/**
-	 * Override if this node should receive a different scope than the parent scope.
+	 * Override if this node should receive a different scope than the parent
+	 * scope.
 	 */
 	createScope(parentScope: ChildScope): void {
 		this.scope = parentScope;
@@ -233,7 +245,8 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 	}
 
 	/**
-	 * Override to perform special initialisation steps after the scope is initialised
+	 * Override to perform special initialisation steps after the scope is
+	 * initialised
 	 */
 	initialise(): void {}
 
@@ -243,7 +256,7 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 		}
 	}
 
-	parseNode(esTreeNode: GenericEsTreeNode): void {
+	parseNode(esTreeNode: GenericEsTreeNode, keepEsTreeNodeKeys?: string[]): void {
 		for (const [key, value] of Object.entries(esTreeNode)) {
 			// That way, we can override this function to add custom initialisation and then call super.parseNode
 			if (this.hasOwnProperty(key)) continue;
@@ -262,14 +275,20 @@ export class NodeBase extends ExpressionEntity implements ExpressionNode {
 					(this as GenericEsTreeNode)[key].push(
 						child === null
 							? null
-							: new (this.context.getNodeConstructor(child.type))(child, this, this.scope)
+							: new (this.context.getNodeConstructor(child.type))(
+									child,
+									this,
+									this.scope,
+									keepEsTreeNodeKeys?.includes(key)
+							  )
 					);
 				}
 			} else {
 				(this as GenericEsTreeNode)[key] = new (this.context.getNodeConstructor(value.type))(
 					value,
 					this,
-					this.scope
+					this.scope,
+					keepEsTreeNodeKeys?.includes(key)
 				);
 			}
 		}

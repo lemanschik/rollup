@@ -19,7 +19,7 @@ export type RollupWarning = RollupLog;
 
 export interface RollupLog {
 	binding?: string;
-	cause?: Error;
+	cause?: unknown;
 	code?: string;
 	exporter?: string;
 	frame?: string;
@@ -52,8 +52,9 @@ export interface ExistingDecodedSourceMap {
 	names: string[];
 	sourceRoot?: string;
 	sources: string[];
-	sourcesContent?: string[];
+	sourcesContent?: (string | null)[];
 	version: number;
+	x_google_ignoreList?: number[];
 }
 
 export interface ExistingRawSourceMap {
@@ -62,8 +63,9 @@ export interface ExistingRawSourceMap {
 	names: string[];
 	sourceRoot?: string;
 	sources: string[];
-	sourcesContent?: string[];
+	sourcesContent?: (string | null)[];
 	version: number;
+	x_google_ignoreList?: number[];
 }
 
 export type DecodedSourceMapOrMissing =
@@ -79,7 +81,7 @@ export interface SourceMap {
 	mappings: string;
 	names: string[];
 	sources: string[];
-	sourcesContent: string[];
+	sourcesContent: (string | null)[];
 	version: number;
 	toString(): string;
 	toUrl(): string;
@@ -133,6 +135,7 @@ export interface MinimalPluginContext {
 export interface EmittedAsset {
 	fileName?: string;
 	name?: string;
+	needsCodeReference?: boolean;
 	source?: string | Uint8Array;
 	type: 'asset';
 }
@@ -216,6 +219,7 @@ export interface PluginContextMeta {
 export interface ResolvedId extends ModuleOptions {
 	external: boolean | 'absolute';
 	id: string;
+	resolvedBy: string;
 }
 
 export interface ResolvedIdMap {
@@ -225,9 +229,12 @@ export interface ResolvedIdMap {
 interface PartialResolvedId extends Partial<PartialNull<ModuleOptions>> {
 	external?: boolean | 'absolute' | 'relative';
 	id: string;
+	resolvedBy?: string;
 }
 
 export type ResolveIdResult = string | NullValue | false | PartialResolvedId;
+
+export type ResolveIdResultWithoutNullValue = string | false | PartialResolvedId;
 
 export type ResolveIdHook = (
 	this: PluginContext,
@@ -456,6 +463,7 @@ export interface OutputPlugin
 		Partial<{ [K in AddonHooks]: ObjectHook<AddonHook> }> {
 	cacheKey?: string;
 	name: string;
+	version?: string;
 }
 
 export interface Plugin extends OutputPlugin, Partial<PluginHooks> {
@@ -502,15 +510,20 @@ export type SourcemapPathTransformOption = (
 	relativeSourcePath: string,
 	sourcemapPath: string
 ) => string;
+export type SourcemapIgnoreListOption = (
+	relativeSourcePath: string,
+	sourcemapPath: string
+) => boolean;
 
 export type InputPluginOption = MaybePromise<Plugin | NullValue | false | InputPluginOption[]>;
 
 export interface InputOptions {
 	acorn?: Record<string, unknown>;
 	acornInjectPlugins?: (() => unknown)[] | (() => unknown);
-	cache?: false | RollupCache;
+	cache?: boolean | RollupCache;
 	context?: string;
 	experimentalCacheExpiry?: number;
+	experimentalLogSideEffects?: boolean;
 	external?: ExternalOption;
 	/** @deprecated Use the "inlineDynamicImports" output option instead. */
 	inlineDynamicImports?: boolean;
@@ -545,6 +558,7 @@ export interface NormalizedInputOptions {
 	cache: false | undefined | RollupCache;
 	context: string;
 	experimentalCacheExpiry: number;
+	experimentalLogSideEffects: boolean;
 	external: IsExternal;
 	/** @deprecated Use the "inlineDynamicImports" output option instead. */
 	inlineDynamicImports: boolean | undefined;
@@ -642,6 +656,8 @@ export interface OutputOptions {
 	dynamicImportInCjs?: boolean;
 	entryFileNames?: string | ((chunkInfo: PreRenderedChunk) => string);
 	esModule?: boolean | 'if-default-prop';
+	/** @deprecated This option is no longer needed and ignored. */
+	experimentalDeepDynamicChunkOptimization?: boolean;
 	experimentalMinChunkSize?: number;
 	exports?: 'default' | 'named' | 'none' | 'auto';
 	extend?: boolean;
@@ -677,6 +693,7 @@ export interface OutputOptions {
 	sourcemapBaseUrl?: string;
 	sourcemapExcludeSources?: boolean;
 	sourcemapFile?: string;
+	sourcemapIgnoreList?: boolean | SourcemapIgnoreListOption;
 	sourcemapPathTransform?: SourcemapPathTransformOption;
 	strict?: boolean;
 	systemNullSetters?: boolean;
@@ -695,6 +712,8 @@ export interface NormalizedOutputOptions {
 	dynamicImportInCjs: boolean;
 	entryFileNames: string | ((chunkInfo: PreRenderedChunk) => string);
 	esModule: boolean | 'if-default-prop';
+	/** @deprecated This option is no longer needed and ignored. */
+	experimentalDeepDynamicChunkOptimization: boolean;
 	experimentalMinChunkSize: number;
 	exports: 'default' | 'named' | 'none' | 'auto';
 	extend: boolean;
@@ -729,6 +748,7 @@ export interface NormalizedOutputOptions {
 	sourcemapBaseUrl: string | undefined;
 	sourcemapExcludeSources: boolean;
 	sourcemapFile: string | undefined;
+	sourcemapIgnoreList: SourcemapIgnoreListOption;
 	sourcemapPathTransform: SourcemapPathTransformOption | undefined;
 	strict: boolean;
 	systemNullSetters: boolean;
@@ -753,6 +773,7 @@ export interface PreRenderedAsset {
 
 export interface OutputAsset extends PreRenderedAsset {
 	fileName: string;
+	needsCodeReference: boolean;
 }
 
 export interface RenderedModule {

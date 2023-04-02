@@ -4,17 +4,18 @@ import { locate } from 'locate-character';
 import MagicString from 'magic-string';
 import ExternalModule from './ExternalModule';
 import type Graph from './Graph';
-import { createHasEffectsContext, createInclusionContext } from './ast/ExecutionContext';
+import { createInclusionContext } from './ast/ExecutionContext';
 import { nodeConstructors } from './ast/nodes';
 import ExportAllDeclaration from './ast/nodes/ExportAllDeclaration';
 import ExportDefaultDeclaration from './ast/nodes/ExportDefaultDeclaration';
 import type ExportNamedDeclaration from './ast/nodes/ExportNamedDeclaration';
-import type Identifier from './ast/nodes/Identifier';
+import Identifier from './ast/nodes/Identifier';
 import type ImportDeclaration from './ast/nodes/ImportDeclaration';
+import ImportDefaultSpecifier from './ast/nodes/ImportDefaultSpecifier';
 import type ImportExpression from './ast/nodes/ImportExpression';
+import ImportNamespaceSpecifier from './ast/nodes/ImportNamespaceSpecifier';
 import Literal from './ast/nodes/Literal';
 import type MetaProperty from './ast/nodes/MetaProperty';
-import * as NodeType from './ast/nodes/NodeType';
 import Program from './ast/nodes/Program';
 import TemplateLiteral from './ast/nodes/TemplateLiteral';
 import VariableDeclaration from './ast/nodes/VariableDeclaration';
@@ -75,6 +76,7 @@ import type { PureFunctions } from './utils/pureFunctions';
 import type { RenderOptions } from './utils/renderHelpers';
 import { timeEnd, timeStart } from './utils/timers';
 import { markModuleAndImpureDependenciesAsExecuted } from './utils/traverseStaticDependencies';
+import { URL_THIS_GETMODULEINFO } from './utils/urls';
 import { MISSING_EXPORT_SHIM_VARIABLE } from './utils/variableNames';
 
 interface ImportDescription {
@@ -164,10 +166,10 @@ function getVariableForExportNameRecursive(
 }
 
 function getAndExtendSideEffectModules(variable: Variable, module: Module): Set<Module> {
-	const sideEffectModules = getOrCreate<Variable, Set<Module>>(
+	const sideEffectModules = getOrCreate(
 		module.sideEffectDependenciesByVariable,
 		variable,
-		getNewSet
+		getNewSet<Module>
 	);
 	let currentVariable: Variable | null = variable;
 	const referencedVariables = new Set([currentVariable]);
@@ -330,6 +332,7 @@ export default class Module {
 			get hasModuleSideEffects() {
 				warnDeprecation(
 					'Accessing ModuleInfo.hasModuleSideEffects from plugins is deprecated. Please use ModuleInfo.moduleSideEffects instead.',
+					URL_THIS_GETMODULEINFO,
 					true,
 					options
 				);
@@ -595,6 +598,13 @@ export default class Module {
 			}
 			if (importerForSideEffects) {
 				setAlternativeExporterIfCyclic(variable, importerForSideEffects, this);
+				if (this.info.moduleSideEffects) {
+					getOrCreate(
+						importerForSideEffects.sideEffectDependenciesByVariable,
+						variable,
+						getNewSet<Module>
+					).add(this);
+				}
 			}
 			return [variable];
 		}
@@ -610,12 +620,12 @@ export default class Module {
 				searchedNamesAndModules
 			})!;
 			if (importerForSideEffects) {
+				setAlternativeExporterIfCyclic(variable, importerForSideEffects, this);
 				getOrCreate(
 					importerForSideEffects.sideEffectDependenciesByVariable,
 					variable,
-					getNewSet
+					getNewSet<Module>
 				).add(this);
-				setAlternativeExporterIfCyclic(variable, importerForSideEffects, this);
 			}
 			return [variable];
 		}
@@ -659,10 +669,7 @@ export default class Module {
 	}
 
 	hasEffects(): boolean {
-		return (
-			this.info.moduleSideEffects === 'no-treeshake' ||
-			(this.ast!.included && this.ast!.hasEffects(createHasEffectsContext()))
-		);
+		return this.info.moduleSideEffects === 'no-treeshake' || this.ast!.hasCachedEffects();
 	}
 
 	include(): void {
@@ -770,15 +777,12 @@ export default class Module {
 		this.transformDependencies = transformDependencies;
 		this.customTransformCache = customTransformCache;
 		this.updateOptions(moduleOptions);
-
-		if (!ast) {
-			ast = this.tryParse();
-		}
+		const moduleAst = ast ?? this.tryParse();
 
 		timeEnd('generate ast', 3);
 		timeStart('analyze ast', 3);
 
-		this.resolvedIds = resolvedIds || Object.create(null);
+		this.resolvedIds = resolvedIds ?? Object.create(null);
 
 		// By default, `id` is the file name. Custom resolvers and loaders
 		// can change that, but it makes sense to use it for the source file name
@@ -821,8 +825,26 @@ export default class Module {
 
 		this.scope = new ModuleScope(this.graph.scope, this.astContext);
 		this.namespace = new NamespaceVariable(this.astContext);
-		this.ast = new Program(ast, { context: this.astContext, type: 'Module' }, this.scope);
-		this.info.ast = ast;
+		this.ast = new Program(moduleAst, { context: this.astContext, type: 'Module' }, this.scope);
+
+		// Assign AST directly if has existing one as there's no way to drop it from memory.
+		// If cache is enabled, also assign directly as otherwise it takes more CPU and memory to re-compute.
+		if (ast || this.options.cache !== false) {
+			this.info.ast = moduleAst;
+		} else {
+			// Make lazy and apply LRU cache to not hog the memory
+			Object.defineProperty(this.info, 'ast', {
+				get: () => {
+					if (this.graph.astLru.has(fileName)) {
+						return this.graph.astLru.get(fileName)!;
+					} else {
+						const parsedAst = this.tryParse();
+						this.graph.astLru.set(fileName, parsedAst);
+						return parsedAst;
+					}
+				}
+			});
+		}
 
 		timeEnd('analyze ast', 3);
 	}
@@ -830,7 +852,7 @@ export default class Module {
 	toJSON(): ModuleJSON {
 		return {
 			assertions: this.info.assertions,
-			ast: this.ast!.esTreeNode,
+			ast: this.info.ast!,
 			code: this.info.code!,
 			customTransformCache: this.customTransformCache,
 			// eslint-disable-next-line unicorn/prefer-spread
@@ -865,17 +887,17 @@ export default class Module {
 			return localVariable;
 		}
 
-		const importDeclaration = this.importDescriptions.get(name);
-		if (importDeclaration) {
-			const otherModule = importDeclaration.module;
+		const importDescription = this.importDescriptions.get(name);
+		if (importDescription) {
+			const otherModule = importDescription.module;
 
-			if (otherModule instanceof Module && importDeclaration.name === '*') {
+			if (otherModule instanceof Module && importDescription.name === '*') {
 				return otherModule.namespace;
 			}
 
 			const [declaration] = getVariableForExportNameRecursive(
 				otherModule,
-				importDeclaration.name,
+				importDescription.name,
 				importerForSideEffects || this,
 				isExportAllSearch,
 				searchedNamesAndModules
@@ -883,8 +905,8 @@ export default class Module {
 
 			if (!declaration) {
 				return this.error(
-					errorMissingExport(importDeclaration.name, this.id, otherModule.id),
-					importDeclaration.start
+					errorMissingExport(importDescription.name, this.id, otherModule.id),
+					importDescription.start
 				);
 			}
 
@@ -892,14 +914,6 @@ export default class Module {
 		}
 
 		return null;
-	}
-
-	tryParse(): acorn.Node {
-		try {
-			return this.graph.contextParse(this.info.code!);
-		} catch (error_: any) {
-			return this.error(errorParseError(error_, this.id), error_.pos);
-		}
 	}
 
 	updateOptions({
@@ -968,13 +982,13 @@ export default class Module {
 
 			const source = node.source.value;
 			this.addSource(source, node);
-			for (const specifier of node.specifiers) {
-				const name = specifier.exported.name;
+			for (const { exported, local, start } of node.specifiers) {
+				const name = exported instanceof Literal ? exported.value : exported.name;
 				this.reexportDescriptions.set(name, {
-					localName: specifier.local.name,
+					localName: local instanceof Literal ? local.value : local.name,
 					module: null as never, // filled in later,
 					source,
-					start: specifier.start
+					start
 				});
 			}
 		} else if (node.declaration) {
@@ -997,9 +1011,10 @@ export default class Module {
 		} else {
 			// export { foo, bar, baz }
 
-			for (const specifier of node.specifiers) {
-				const localName = specifier.local.name;
-				const exportedName = specifier.exported.name;
+			for (const { local, exported } of node.specifiers) {
+				// except for reexports, local must be an Identifier
+				const localName = (local as Identifier).name;
+				const exportedName = exported instanceof Identifier ? exported.name : exported.value;
 				this.exports.set(exportedName, { identifier: null, localName });
 			}
 		}
@@ -1009,10 +1024,14 @@ export default class Module {
 		const source = node.source.value;
 		this.addSource(source, node);
 		for (const specifier of node.specifiers) {
-			const isDefault = specifier.type === NodeType.ImportDefaultSpecifier;
-			const isNamespace = specifier.type === NodeType.ImportNamespaceSpecifier;
-
-			const name = isDefault ? 'default' : isNamespace ? '*' : specifier.imported.name;
+			const name =
+				specifier instanceof ImportDefaultSpecifier
+					? 'default'
+					: specifier instanceof ImportNamespaceSpecifier
+					? '*'
+					: specifier.imported instanceof Identifier
+					? specifier.imported.name
+					: specifier.imported.value;
 			this.importDescriptions.set(specifier.local.name, {
 				module: null as never, // filled in later
 				name,
@@ -1237,6 +1256,14 @@ export default class Module {
 	private shimMissingExport(name: string): void {
 		this.options.onwarn(errorShimmedExport(this.id, name));
 		this.exports.set(name, MISSING_EXPORT_SHIM_DESCRIPTION);
+	}
+
+	private tryParse(): acorn.Node {
+		try {
+			return this.graph.contextParse(this.info.code!);
+		} catch (error_: any) {
+			return this.error(errorParseError(error_, this.id), error_.pos);
+		}
 	}
 }
 

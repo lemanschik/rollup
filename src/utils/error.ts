@@ -4,13 +4,29 @@ import type {
 	InternalModuleFormat,
 	NormalizedInputOptions,
 	RollupLog,
-	RollupWarning,
 	WarningHandler
 } from '../rollup/types';
-import { extname } from '../utils/path';
 import getCodeFrame from './getCodeFrame';
+import { extname } from './path';
 import { printQuotedStringList } from './printStringList';
 import relativeId from './relativeId';
+import { getRollupUrl } from './url';
+import {
+	URL_A_SIMPLE_EXAMPLE,
+	URL_AVOIDING_EVAL,
+	URL_BUNDLE_CONFIG_AS_CJS,
+	URL_CONFIGURATION_FILES,
+	URL_NAME_IS_NOT_EXPORTED,
+	URL_OUTPUT_DIR,
+	URL_OUTPUT_EXPORTS,
+	URL_OUTPUT_EXTEND,
+	URL_OUTPUT_GLOBALS,
+	URL_OUTPUT_INTEROP,
+	URL_OUTPUT_NAME,
+	URL_SOURCEMAP_IS_LIKELY_TO_BE_INCORRECT,
+	URL_THIS_IS_UNDEFINED,
+	URL_TREATING_MODULE_AS_EXTERNAL_DEPENDENCY
+} from './urls';
 
 export function error(base: Error | RollupLog): never {
 	if (!(base instanceof Error)) {
@@ -243,7 +259,8 @@ export function errorCyclicCrossChunkReexport(
 	exportName: string,
 	exporter: string,
 	reexporter: string,
-	importer: string
+	importer: string,
+	preserveModules: boolean
 ): RollupLog {
 	return {
 		code: CYCLIC_CROSS_CHUNK_REEXPORT,
@@ -255,15 +272,23 @@ export function errorCyclicCrossChunkReexport(
 			reexporter
 		)}" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.\nEither change the import in "${relativeId(
 			importer
-		)}" to point directly to the exporting module or do not use "preserveModules" to ensure these modules end up in the same chunk.`,
+		)}" to point directly to the exporting module or ${
+			preserveModules ? 'do not use "output.preserveModules"' : 'reconfigure "output.manualChunks"'
+		} to ensure these modules end up in the same chunk.`,
 		reexporter
 	};
 }
 
-export function errorDeprecation(deprecation: string | RollupWarning): RollupLog {
+export function errorDeprecation(
+	deprecation: string,
+	urlSnippet: string,
+	plugin?: string
+): RollupLog {
 	return {
 		code: DEPRECATED_FEATURE,
-		...(typeof deprecation === 'string' ? { message: deprecation } : deprecation)
+		message: deprecation,
+		url: getRollupUrl(urlSnippet),
+		...(plugin ? { plugin } : {})
 	};
 }
 
@@ -296,7 +321,7 @@ export function errorEval(id: string): RollupLog {
 		message: `Use of eval in "${relativeId(
 			id
 		)}" is strongly discouraged as it poses security risks and may cause issues with minification.`,
-		url: 'https://rollupjs.org/guide/en/#avoiding-eval'
+		url: getRollupUrl(URL_AVOIDING_EVAL)
 	};
 }
 
@@ -335,7 +360,7 @@ export function errorIllegalIdentifierAsName(name: string): RollupLog {
 	return {
 		code: ILLEGAL_IDENTIFIER_AS_NAME,
 		message: `Given name "${name}" is not a legal JS identifier. If you need this, you can try "output.extend: true".`,
-		url: 'https://rollupjs.org/guide/en/#outputextend'
+		url: getRollupUrl(URL_OUTPUT_EXTEND)
 	};
 }
 
@@ -396,7 +421,7 @@ export function errorCannotBundleConfigAsEsm(originalError: Error): RollupLog {
 		code: INVALID_CONFIG_MODULE_FORMAT,
 		message: `Rollup transpiled your configuration to an  ES module even though it appears to contain CommonJS elements. To resolve this, you can pass the "--bundleConfigAsCjs" flag to Rollup or change your configuration to only contain valid ESM code.\n\nOriginal error: ${originalError.message}`,
 		stack: originalError.stack,
-		url: 'https://rollupjs.org/guide/en/#--bundleconfigascjs'
+		url: getRollupUrl(URL_BUNDLE_CONFIG_AS_CJS)
 	};
 }
 
@@ -406,7 +431,7 @@ export function errorCannotLoadConfigAsCjs(originalError: Error): RollupLog {
 		code: INVALID_CONFIG_MODULE_FORMAT,
 		message: `Node tried to load your configuration file as CommonJS even though it is likely an ES module. To resolve this, change the extension of your configuration to ".mjs", set "type": "module" in your package.json file or pass the "--bundleConfigAsCjs" flag.\n\nOriginal error: ${originalError.message}`,
 		stack: originalError.stack,
-		url: 'https://rollupjs.org/guide/en/#--bundleconfigascjs'
+		url: getRollupUrl(URL_BUNDLE_CONFIG_AS_CJS)
 	};
 }
 
@@ -416,7 +441,7 @@ export function errorCannotLoadConfigAsEsm(originalError: Error): RollupLog {
 		code: INVALID_CONFIG_MODULE_FORMAT,
 		message: `Node tried to load your configuration as an ES module even though it is likely CommonJS. To resolve this, change the extension of your configuration to ".cjs" or pass the "--bundleConfigAsCjs" flag.\n\nOriginal error: ${originalError.message}`,
 		stack: originalError.stack,
-		url: 'https://rollupjs.org/guide/en/#--bundleconfigascjs'
+		url: getRollupUrl(URL_BUNDLE_CONFIG_AS_CJS)
 	};
 }
 
@@ -424,7 +449,7 @@ export function errorInvalidExportOptionValue(optionValue: string): RollupLog {
 	return {
 		code: INVALID_EXPORT_OPTION,
 		message: `"output.exports" must be "default", "named", "none", "auto", or left unspecified (defaults to "auto"), received "${optionValue}".`,
-		url: `https://rollupjs.org/guide/en/#outputexports`
+		url: getRollupUrl(URL_OUTPUT_EXPORTS)
 	};
 }
 
@@ -438,7 +463,7 @@ export function errorIncompatibleExportOptionValue(
 		message: `"${optionValue}" was specified for "output.exports", but entry module "${relativeId(
 			entryModule
 		)}" has the following exports: ${printQuotedStringList(keys)}`,
-		url: 'https://rollupjs.org/guide/en/#outputexports'
+		url: getRollupUrl(URL_OUTPUT_EXPORTS)
 	};
 }
 
@@ -453,16 +478,16 @@ export function errorInternalIdCannotBeExternal(source: string, importer: string
 
 export function errorInvalidOption(
 	option: string,
-	urlHash: string,
+	urlSnippet: string,
 	explanation: string,
 	value?: string | boolean | null
 ): RollupLog {
 	return {
 		code: INVALID_OPTION,
 		message: `Invalid value ${
-			value !== undefined ? `${JSON.stringify(value)} ` : ''
+			value === undefined ? '' : `${JSON.stringify(value)} `
 		}for option "${option}" - ${explanation}.`,
-		url: `https://rollupjs.org/guide/en/#${urlHash}`
+		url: getRollupUrl(urlSnippet)
 	};
 }
 
@@ -520,7 +545,7 @@ export function errorMissingConfig(): RollupLog {
 	return {
 		code: MISSING_CONFIG,
 		message: 'Config file must export an options object, or an array of options objects',
-		url: 'https://rollupjs.org/guide/en/#configuration-files'
+		url: getRollupUrl(URL_CONFIGURATION_FILES)
 	};
 }
 
@@ -538,7 +563,7 @@ export function errorMissingExport(
 		message: `"${binding}" is not exported by "${relativeId(exporter)}", imported by "${relativeId(
 			importingModule
 		)}".${isJson ? ' (Note that you need @rollup/plugin-json to import JSON files)' : ''}`,
-		url: `https://rollupjs.org/guide/en/#error-name-is-not-exported-by-module`
+		url: getRollupUrl(URL_NAME_IS_NOT_EXPORTED)
 	};
 }
 
@@ -555,7 +580,7 @@ export function errorMissingGlobalName(externalId: string, guess: string): Rollu
 		id: externalId,
 		message: `No name was provided for external module "${externalId}" in "output.globals" – guessing "${guess}".`,
 		names: [guess],
-		url: 'https://rollupjs.org/guide/en/#outputglobals'
+		url: getRollupUrl(URL_OUTPUT_GLOBALS)
 	};
 }
 
@@ -605,7 +630,7 @@ export function errorMissingNameOptionForIifeExport(): RollupLog {
 	return {
 		code: MISSING_NAME_OPTION_FOR_IIFE_EXPORT,
 		message: `If you do not supply "output.name", you may not be able to access the exports of an IIFE bundle.`,
-		url: 'https://rollupjs.org/guide/en/#outputname'
+		url: getRollupUrl(URL_OUTPUT_NAME)
 	};
 }
 
@@ -614,7 +639,7 @@ export function errorMissingNameOptionForUmdExport(): RollupLog {
 		code: MISSING_NAME_OPTION_FOR_IIFE_EXPORT,
 		message:
 			'You must supply "output.name" for UMD bundles that have exports so that the exports are accessible in environments without a module loader.',
-		url: 'https://rollupjs.org/guide/en/#outputname'
+		url: getRollupUrl(URL_OUTPUT_NAME)
 	};
 }
 
@@ -633,7 +658,7 @@ export function errorMissingFileOrDirOption(): RollupLog {
 	return {
 		code: MISSING_OPTION,
 		message: 'You must specify "output.file" or "output.dir" for the build.',
-		url: 'https://rollupjs.org/guide/en/#outputdir'
+		url: getRollupUrl(URL_OUTPUT_DIR)
 	};
 }
 
@@ -646,7 +671,7 @@ export function errorMixedExport(facadeModuleId: string, name?: string): RollupL
 		)}" is using named and default exports together. Consumers of your bundle will have to use \`${
 			name || 'chunk'
 		}.default\` to access the default export, which may not be what you want. Use \`output.exports: "named"\` to disable this warning.`,
-		url: `https://rollupjs.org/guide/en/#outputexports`
+		url: getRollupUrl(URL_OUTPUT_EXPORTS)
 	};
 }
 
@@ -682,7 +707,7 @@ export function errorNoFileSystemInBrowser(method: string): RollupLog {
 	return {
 		code: NO_FS_IN_BROWSER,
 		message: `Cannot access the file system (via "${method}") when using the browser build of Rollup. Make sure you supply a plugin with custom resolveId and load hooks to Rollup.`,
-		url: 'https://rollupjs.org/guide/en/#a-simple-example'
+		url: getRollupUrl(URL_A_SIMPLE_EXAMPLE)
 	};
 }
 
@@ -751,7 +776,14 @@ export function errorSourcemapBroken(plugin: string): RollupLog {
 		code: SOURCEMAP_BROKEN,
 		message: `Sourcemap is likely to be incorrect: a plugin (${plugin}) was used to transform files, but didn't generate a sourcemap for the transformation. Consult the plugin documentation for help`,
 		plugin,
-		url: `https://rollupjs.org/guide/en/#warning-sourcemap-is-likely-to-be-incorrect`
+		url: getRollupUrl(URL_SOURCEMAP_IS_LIKELY_TO_BE_INCORRECT)
+	};
+}
+
+export function errorConflictingSourcemapSources(filename: string): RollupLog {
+	return {
+		code: SOURCEMAP_BROKEN,
+		message: `Multiple conflicting contents for sourcemap source ${filename}`
 	};
 }
 
@@ -799,7 +831,7 @@ export function errorThisIsUndefined(): RollupLog {
 	return {
 		code: THIS_IS_UNDEFINED,
 		message: `The 'this' keyword is equivalent to 'undefined' at the top level of an ES module, and has been rewritten`,
-		url: `https://rollupjs.org/guide/en/#error-this-is-undefined`
+		url: getRollupUrl(URL_THIS_IS_UNDEFINED)
 	};
 }
 
@@ -815,7 +847,7 @@ export function errorUnexpectedNamedImport(
 		message: `The named export "${imported}" was ${importType}ed from the external module "${relativeId(
 			id
 		)}" even though its interop type is "defaultOnly". Either remove or change this ${importType} or change the value of the "output.interop" option.`,
-		url: 'https://rollupjs.org/guide/en/#outputinterop'
+		url: getRollupUrl(URL_OUTPUT_INTEROP)
 	};
 }
 
@@ -826,7 +858,7 @@ export function errorUnexpectedNamespaceReexport(id: string): RollupLog {
 		message: `There was a namespace "*" reexport from the external module "${relativeId(
 			id
 		)}" even though its interop type is "defaultOnly". This will be ignored as namespace reexports only reexport named exports. If this is not intended, either remove or change this reexport or change the value of the "output.interop" option.`,
-		url: 'https://rollupjs.org/guide/en/#outputinterop'
+		url: getRollupUrl(URL_OUTPUT_INTEROP)
 	};
 }
 
@@ -877,7 +909,7 @@ export function errorUnresolvedImportTreatedAsExternal(
 		message: `"${source}" is imported by "${relativeId(
 			importer
 		)}", but could not be resolved – treating it as an external dependency.`,
-		url: 'https://rollupjs.org/guide/en/#warning-treating-module-as-external-dependency'
+		url: getRollupUrl(URL_TREATING_MODULE_AS_EXTERNAL_DEPENDENCY)
 	};
 }
 
@@ -908,26 +940,32 @@ export function errorFailedValidation(message: string): RollupLog {
 }
 
 export function warnDeprecation(
-	deprecation: string | RollupWarning,
+	deprecation: string,
+	urlSnippet: string,
 	activeDeprecation: boolean,
-	options: NormalizedInputOptions
+	options: NormalizedInputOptions,
+	plugin?: string
 ): void {
 	warnDeprecationWithOptions(
 		deprecation,
+		urlSnippet,
 		activeDeprecation,
 		options.onwarn,
-		options.strictDeprecations
+		options.strictDeprecations,
+		plugin
 	);
 }
 
 export function warnDeprecationWithOptions(
-	deprecation: string | RollupWarning,
+	deprecation: string,
+	urlSnippet: string,
 	activeDeprecation: boolean,
 	warn: WarningHandler,
-	strictDeprecations: boolean
+	strictDeprecations: boolean,
+	plugin?: string
 ): void {
 	if (activeDeprecation || strictDeprecations) {
-		const warning = errorDeprecation(deprecation);
+		const warning = errorDeprecation(deprecation, urlSnippet, plugin);
 		if (strictDeprecations) {
 			return error(warning);
 		}

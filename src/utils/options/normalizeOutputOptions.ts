@@ -16,6 +16,23 @@ import { resolve } from '../path';
 import { sanitizeFileName as defaultSanitizeFileName } from '../sanitizeFileName';
 import { isValidUrl } from '../url';
 import {
+	URL_OUTPUT_AMD_BASEPATH,
+	URL_OUTPUT_AMD_ID,
+	URL_OUTPUT_DIR,
+	URL_OUTPUT_DYNAMICIMPORTFUNCTION,
+	URL_OUTPUT_EXPERIMENTALDEEPCHUNKOPTIMIZATION,
+	URL_OUTPUT_FORMAT,
+	URL_OUTPUT_GENERATEDCODE,
+	URL_OUTPUT_GENERATEDCODE_CONSTBINDINGS,
+	URL_OUTPUT_GENERATEDCODE_SYMBOLS,
+	URL_OUTPUT_INLINEDYNAMICIMPORTS,
+	URL_OUTPUT_INTEROP,
+	URL_OUTPUT_MANUALCHUNKS,
+	URL_OUTPUT_SOURCEMAPBASEURL,
+	URL_PRESERVEENTRYSIGNATURES,
+	URL_RENDERDYNAMICIMPORT
+} from '../urls';
+import {
 	generatedCodePresets,
 	getOptionWithPreset,
 	normalizePluginOption,
@@ -50,6 +67,10 @@ export async function normalizeOutputOptions(
 		dynamicImportInCjs: config.dynamicImportInCjs ?? true,
 		entryFileNames: getEntryFileNames(config, unsetOptions),
 		esModule: config.esModule ?? 'if-default-prop',
+		experimentalDeepDynamicChunkOptimization: getExperimentalDeepDynamicChunkOptimization(
+			config,
+			inputOptions
+		),
 		experimentalMinChunkSize: config.experimentalMinChunkSize || 0,
 		exports: getExports(config, unsetOptions),
 		extend: config.extend || false,
@@ -87,6 +108,12 @@ export async function normalizeOutputOptions(
 		sourcemapBaseUrl: getSourcemapBaseUrl(config),
 		sourcemapExcludeSources: config.sourcemapExcludeSources || false,
 		sourcemapFile: config.sourcemapFile,
+		sourcemapIgnoreList:
+			typeof config.sourcemapIgnoreList === 'function'
+				? config.sourcemapIgnoreList
+				: config.sourcemapIgnoreList === false
+				? () => false
+				: relativeSourcePath => relativeSourcePath.includes('node_modules'),
 		sourcemapPathTransform: config.sourcemapPathTransform as
 			| SourcemapPathTransformOption
 			| undefined,
@@ -110,7 +137,7 @@ const getFile = (
 			return error(
 				errorInvalidOption(
 					'output.file',
-					'outputdir',
+					URL_OUTPUT_DIR,
 					'you must set "output.dir" instead of "output.file" when using the "output.preserveModules" option'
 				)
 			);
@@ -119,7 +146,7 @@ const getFile = (
 			return error(
 				errorInvalidOption(
 					'output.file',
-					'outputdir',
+					URL_OUTPUT_DIR,
 					'you must set "output.dir" instead of "output.file" when providing named inputs'
 				)
 			);
@@ -150,10 +177,14 @@ const getFormat = (config: OutputOptions): NormalizedOutputOptions['format'] => 
 			return configFormat;
 		}
 		default: {
-			return error({
-				message: `You must specify "output.format", which can be one of "amd", "cjs", "system", "es", "iife" or "umd".`,
-				url: `https://rollupjs.org/guide/en/#outputformat`
-			});
+			return error(
+				errorInvalidOption(
+					'output.format',
+					URL_OUTPUT_FORMAT,
+					`Valid values are "amd", "cjs", "system", "es", "iife" or "umd"`,
+					configFormat
+				)
+			);
 		}
 	}
 };
@@ -169,7 +200,7 @@ const getInlineDynamicImports = (
 		return error(
 			errorInvalidOption(
 				'output.inlineDynamicImports',
-				'outputinlinedynamicimports',
+				URL_OUTPUT_INLINEDYNAMICIMPORTS,
 				'multiple inputs are not supported when "output.inlineDynamicImports" is true'
 			)
 		);
@@ -188,7 +219,7 @@ const getPreserveModules = (
 			return error(
 				errorInvalidOption(
 					'output.inlineDynamicImports',
-					'outputinlinedynamicimports',
+					URL_OUTPUT_INLINEDYNAMICIMPORTS,
 					`this option is not supported for "output.preserveModules"`
 				)
 			);
@@ -197,7 +228,7 @@ const getPreserveModules = (
 			return error(
 				errorInvalidOption(
 					'preserveEntrySignatures',
-					'preserveentrysignatures',
+					URL_PRESERVEENTRYSIGNATURES,
 					'setting this option to false is not supported for "output.preserveModules"'
 				)
 			);
@@ -214,6 +245,7 @@ const getPreferConst = (
 	if (configPreferConst != null) {
 		warnDeprecation(
 			`The "output.preferConst" option is deprecated. Use the "output.generatedCode.constBindings" option instead.`,
+			URL_OUTPUT_GENERATEDCODE_CONSTBINDINGS,
 			true,
 			inputOptions
 		);
@@ -250,7 +282,7 @@ const getAmd = (config: OutputOptions): NormalizedOutputOptions['amd'] => {
 		return error(
 			errorInvalidOption(
 				'output.amd.id',
-				'outputamd',
+				URL_OUTPUT_AMD_ID,
 				'this option cannot be used together with "output.amd.autoId"/"output.amd.basePath"'
 			)
 		);
@@ -259,7 +291,7 @@ const getAmd = (config: OutputOptions): NormalizedOutputOptions['amd'] => {
 		return error(
 			errorInvalidOption(
 				'output.amd.basePath',
-				'outputamd',
+				URL_OUTPUT_AMD_BASEPATH,
 				'this option only works with "output.amd.autoId"'
 			)
 		);
@@ -301,7 +333,7 @@ const getDir = (
 		return error(
 			errorInvalidOption(
 				'output.dir',
-				'outputdir',
+				URL_OUTPUT_DIR,
 				'you must set either "output.file" for a single-file build or "output.dir" when generating multiple chunks'
 			)
 		);
@@ -318,6 +350,7 @@ const getDynamicImportFunction = (
 	if (configDynamicImportFunction) {
 		warnDeprecation(
 			`The "output.dynamicImportFunction" option is deprecated. Use the "renderDynamicImport" plugin hook instead.`,
+			URL_RENDERDYNAMICIMPORT,
 			true,
 			inputOptions
 		);
@@ -325,7 +358,7 @@ const getDynamicImportFunction = (
 			inputOptions.onwarn(
 				errorInvalidOption(
 					'output.dynamicImportFunction',
-					'outputdynamicImportFunction',
+					URL_OUTPUT_DYNAMICIMPORTFUNCTION,
 					'this option is ignored for formats other than "es"'
 				)
 			);
@@ -344,6 +377,23 @@ const getEntryFileNames = (
 	}
 	return configEntryFileNames ?? '[name].js';
 };
+
+function getExperimentalDeepDynamicChunkOptimization(
+	config: OutputOptions,
+	inputOptions: NormalizedInputOptions
+) {
+	const configExperimentalDeepDynamicChunkOptimization =
+		config.experimentalDeepDynamicChunkOptimization;
+	if (configExperimentalDeepDynamicChunkOptimization != null) {
+		warnDeprecation(
+			`The "output.experimentalDeepDynamicChunkOptimization" option is deprecated as Rollup always runs the full chunking algorithm now. The option should be removed.`,
+			URL_OUTPUT_EXPERIMENTALDEEPCHUNKOPTIMIZATION,
+			true,
+			inputOptions
+		);
+	}
+	return configExperimentalDeepDynamicChunkOptimization || false;
+}
 
 function getExports(
 	config: OutputOptions,
@@ -366,6 +416,7 @@ const getGeneratedCode = (
 		config.generatedCode,
 		generatedCodePresets,
 		'output.generatedCode',
+		URL_OUTPUT_GENERATEDCODE,
 		''
 	);
 	return {
@@ -413,7 +464,7 @@ const validateInterop = (interop: InteropType): InteropType => {
 		return error(
 			errorInvalidOption(
 				'output.interop',
-				'outputinterop',
+				URL_OUTPUT_INTEROP,
 				// eslint-disable-next-line unicorn/prefer-spread
 				`use one of ${Array.from(ALLOWED_INTEROP_TYPES, value => JSON.stringify(value)).join(
 					', '
@@ -437,7 +488,7 @@ const getManualChunks = (
 			return error(
 				errorInvalidOption(
 					'output.manualChunks',
-					'outputmanualchunks',
+					URL_OUTPUT_MANUALCHUNKS,
 					'this option is not supported for "output.inlineDynamicImports"'
 				)
 			);
@@ -446,7 +497,7 @@ const getManualChunks = (
 			return error(
 				errorInvalidOption(
 					'output.manualChunks',
-					'outputmanualchunks',
+					URL_OUTPUT_MANUALCHUNKS,
 					'this option is not supported for "output.preserveModules"'
 				)
 			);
@@ -471,6 +522,7 @@ const getNamespaceToStringTag = (
 	if (configNamespaceToStringTag != null) {
 		warnDeprecation(
 			`The "output.namespaceToStringTag" option is deprecated. Use the "output.generatedCode.symbols" option instead.`,
+			URL_OUTPUT_GENERATEDCODE_SYMBOLS,
 			true,
 			inputOptions
 		);
@@ -490,7 +542,7 @@ const getSourcemapBaseUrl = (
 		return error(
 			errorInvalidOption(
 				'output.sourcemapBaseUrl',
-				'outputsourcemapbaseurl',
+				URL_OUTPUT_SOURCEMAPBASEURL,
 				`must be a valid URL, received ${JSON.stringify(sourcemapBaseUrl)}`
 			)
 		);

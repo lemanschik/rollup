@@ -1,4 +1,5 @@
 import * as acorn from 'acorn';
+import flru from 'flru';
 import type ExternalModule from './ExternalModule';
 import Module from './Module';
 import { ModuleLoader, type UnresolvedModule } from './ModuleLoader';
@@ -52,6 +53,7 @@ function normalizeEntryModules(
 
 export default class Graph {
 	readonly acornParser: typeof acorn.Parser;
+	readonly astLru = flru<acorn.Node>(5);
 	readonly cachedModules = new Map<string, ModuleJSON>();
 	readonly deoptimizationTracker = new PathTracker();
 	entryModules: Module[] = [];
@@ -185,7 +187,8 @@ export default class Graph {
 	}
 
 	private includeStatements(): void {
-		for (const module of [...this.entryModules, ...this.implicitEntryModules]) {
+		const entryModules = [...this.entryModules, ...this.implicitEntryModules];
+		for (const module of entryModules) {
 			markModuleAndImpureDependenciesAsExecuted(module);
 		}
 		if (this.options.treeshake) {
@@ -205,7 +208,7 @@ export default class Graph {
 				if (treeshakingPass === 1) {
 					// We only include exports after the first pass to avoid issues with
 					// the TDZ detection logic
-					for (const module of [...this.entryModules, ...this.implicitEntryModules]) {
+					for (const module of entryModules) {
 						if (module.preserveSignature !== false) {
 							module.includeAllExports(false);
 							this.needsTreeshakingPass = true;

@@ -10,14 +10,13 @@ module.exports = {
 			buildStart(options) {
 				assert.deepStrictEqual(JSON.parse(JSON.stringify(options)), {
 					acorn: {
-						allowAwaitOutsideFunction: true,
 						ecmaVersion: 'latest',
-						preserveParens: false,
 						sourceType: 'module'
 					},
 					acornInjectPlugins: [null],
 					context: 'undefined',
 					experimentalCacheExpiry: 10,
+					experimentalLogSideEffects: false,
 					input: ['used'],
 					makeAbsoluteExternalsRelative: 'ifRelativeSource',
 					maxParallelFileOps: 20,

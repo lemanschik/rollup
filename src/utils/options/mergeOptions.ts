@@ -8,6 +8,7 @@ import type {
 	WarningHandler
 } from '../../rollup/types';
 import { ensureArray } from '../ensureArray';
+import { URL_OUTPUT_GENERATEDCODE, URL_TREESHAKE } from '../urls';
 import type { CommandConfigObject } from './normalizeInputOptions';
 import {
 	defaultOnWarn,
@@ -61,7 +62,9 @@ export async function mergeOptions(
 		command,
 		[
 			...Object.keys(inputOptions),
-			...Object.keys(outputOptions[0]).filter(option => option !== 'sourcemapPathTransform'),
+			...Object.keys(outputOptions[0]).filter(
+				option => option !== 'sourcemapIgnoreList' && option !== 'sourcemapPathTransform'
+			),
 			...Object.keys(commandAliases),
 			'bundleConfigAsCjs',
 			'config',
@@ -122,6 +125,7 @@ async function mergeInputOptions(
 		cache: config.cache as false | RollupCache | undefined,
 		context: getOption('context'),
 		experimentalCacheExpiry: getOption('experimentalCacheExpiry'),
+		experimentalLogSideEffects: getOption('experimentalLogSideEffects'),
 		external: getExternal(config, overrides),
 		inlineDynamicImports: getOption('inlineDynamicImports'),
 		input: getOption('input') || [],
@@ -142,7 +146,7 @@ async function mergeInputOptions(
 			config,
 			overrides,
 			'treeshake',
-			objectifyOptionWithPresets(treeshakePresets, 'treeshake', 'false, true, ')
+			objectifyOptionWithPresets(treeshakePresets, 'treeshake', URL_TREESHAKE, 'false, true, ')
 		),
 		watch: getWatch(config, overrides)
 	};
@@ -232,6 +236,7 @@ async function mergeOutputOptions(
 		dynamicImportInCjs: getOption('dynamicImportInCjs'),
 		entryFileNames: getOption('entryFileNames'),
 		esModule: getOption('esModule'),
+		experimentalDeepDynamicChunkOptimization: getOption('experimentalDeepDynamicChunkOptimization'),
 		experimentalMinChunkSize: getOption('experimentalMinChunkSize'),
 		exports: getOption('exports'),
 		extend: getOption('extend'),
@@ -245,7 +250,12 @@ async function mergeOutputOptions(
 			config,
 			overrides,
 			'generatedCode',
-			objectifyOptionWithPresets(generatedCodePresets, 'output.generatedCode', '')
+			objectifyOptionWithPresets(
+				generatedCodePresets,
+				'output.generatedCode',
+				URL_OUTPUT_GENERATEDCODE,
+				''
+			)
 		),
 		globals: getOption('globals'),
 		hoistTransitiveImports: getOption('hoistTransitiveImports'),
@@ -269,6 +279,7 @@ async function mergeOutputOptions(
 		sourcemapBaseUrl: getOption('sourcemapBaseUrl'),
 		sourcemapExcludeSources: getOption('sourcemapExcludeSources'),
 		sourcemapFile: getOption('sourcemapFile'),
+		sourcemapIgnoreList: getOption('sourcemapIgnoreList'),
 		sourcemapPathTransform: getOption('sourcemapPathTransform'),
 		strict: getOption('strict'),
 		systemNullSetters: getOption('systemNullSetters'),

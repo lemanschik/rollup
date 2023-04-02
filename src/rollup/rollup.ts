@@ -10,7 +10,7 @@ import {
 	// eslint-disable-next-line unicorn/prevent-abbreviations
 	errorMissingFileOrDirOption
 } from '../utils/error';
-import { promises as fs } from '../utils/fs';
+import { mkdir, writeFile } from '../utils/fs';
 import { catchUnfinishedHookActions } from '../utils/hookActions';
 import { normalizeInputOptions } from '../utils/options/normalizeInputOptions';
 import { normalizeOutputOptions } from '../utils/options/normalizeOutputOptions';
@@ -50,10 +50,12 @@ export async function rollupInternal(
 
 	const graph = new Graph(inputOptions, watcher);
 
-	// remove the cache option from the memory after graph creation (cache is not used anymore)
+	// remove the cache object from the memory after graph creation (cache is not used anymore)
 	const useCache = rawInputOptions.cache !== false;
-	delete inputOptions.cache;
-	delete rawInputOptions.cache;
+	if (rawInputOptions.cache) {
+		inputOptions.cache = undefined;
+		rawInputOptions.cache = undefined;
+	}
 
 	timeStart('BUILD', 1);
 
@@ -266,9 +268,9 @@ async function writeOutputFile(
 	const fileName = resolve(outputOptions.dir || dirname(outputOptions.file!), outputFile.fileName);
 
 	// 'recursive: true' does not throw if the folder structure, or parts of it, already exist
-	await fs.mkdir(dirname(fileName), { recursive: true });
+	await mkdir(dirname(fileName), { recursive: true });
 
-	return fs.writeFile(fileName, outputFile.type === 'asset' ? outputFile.source : outputFile.code);
+	return writeFile(fileName, outputFile.type === 'asset' ? outputFile.source : outputFile.code);
 }
 
 /**

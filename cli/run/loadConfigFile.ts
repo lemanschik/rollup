@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -16,13 +16,11 @@ import { mergeOptions } from '../../src/utils/options/mergeOptions';
 import type { GenericConfigObject } from '../../src/utils/options/options';
 import relativeId from '../../src/utils/relativeId';
 import { stderr } from '../logging';
-import batchWarnings, { type BatchWarnings } from './batchWarnings';
+import batchWarnings from './batchWarnings';
 import { addCommandPluginsToInputOptions, addPluginsFromCommandOption } from './commandPlugins';
+import type { LoadConfigFile } from './loadConfigFileType';
 
-export async function loadConfigFile(
-	fileName: string,
-	commandOptions: any = {}
-): Promise<{ options: MergedRollupOptions[]; warnings: BatchWarnings }> {
+export const loadConfigFile: LoadConfigFile = async (fileName, commandOptions = {}) => {
 	const configs = await getConfigList(
 		getDefaultFromCjs(await getConfigFileExport(fileName, commandOptions)),
 		commandOptions
@@ -40,7 +38,7 @@ export async function loadConfigFile(
 		warnings.flush();
 		throw error_;
 	}
-}
+};
 
 async function getConfigFileExport(fileName: string, commandOptions: Record<string, unknown>) {
 	if (commandOptions.configPlugin || commandOptions.bundleConfigAsCjs) {
@@ -132,12 +130,12 @@ async function loadConfigFromWrittenFile(
 	bundledFileName: string,
 	bundledCode: string
 ): Promise<unknown> {
-	await fs.writeFile(bundledFileName, bundledCode);
+	await writeFile(bundledFileName, bundledCode);
 	try {
 		return (await import(pathToFileURL(bundledFileName).href)).default;
 	} finally {
 		// Not awaiting here saves some ms while potentially hiding a non-critical error
-		fs.unlink(bundledFileName);
+		unlink(bundledFileName);
 	}
 }
 
