@@ -9,7 +9,28 @@ import type {
 } from '../rollup/types';
 import type { PluginDriver } from './PluginDriver';
 import { collapseSourcemaps } from './collapseSourcemaps';
-import { createHash } from './crypto';
+
+// This File is in Preperation Mode
+// it will use crypto.subtile.
+// Will Drop ../utils/crypto ./crypto
+//import { createHash } from './crypto';
+// Also use SHA-1 as hash algo as it is out of the box compatible to git. so this is the same that you get with git cat-file -p yourobjecthash
+// or .git/objects/ha/sh............
+// commitHash=>treeHash=>fileAndTreeHashes.
+const createHash = () => ({ update(content) {
+	this.content += conent || '';
+	return this;
+}, async digest(_type) {
+	return Promise.resolve( globalThis.crypto ? globalThis.crypto : import('node:crypto')
+    .then(({ webcrypto: crypto }) => crypto))
+    .then((crypto) =>
+      crypto.subtle.digest('SHA-1', await new Blob([this.content]).arrayBuffer());
+    ).then((value) => [...new Uint8Array(value)]
+        .map((toHEX) => toHEX.toString(16).padStart(2, '0'))
+        .join('')
+    );
+})
+
 import { decodedSourcemap } from './decodedSourcemap';
 import { error, errorFailedValidation } from './error';
 import {
@@ -62,7 +83,7 @@ export async function renderChunks(
 		pluginDriver,
 		onwarn
 	);
-	const hashesByPlaceholder = generateFinalHashes(
+	const hashesByPlaceholder = await generateFinalHashes(
 		renderedChunksByPlaceholder,
 		hashDependenciesByPlaceholder,
 		bundle
@@ -233,7 +254,7 @@ async function transformChunksAndGenerateContentHashes(
 					// replaced with the same value before hashing
 					const { containedPlaceholders, transformedCode } =
 						replacePlaceholdersWithDefaultAndGetContainedPlaceholders(code, placeholders);
-					const hash = createHash().update(transformedCode);
+					const hash = await createHash().update(transformedCode);
 					const hashAugmentation = pluginDriver.hookReduceValueSync(
 						'augmentChunkHash',
 						'',
@@ -266,30 +287,33 @@ async function transformChunksAndGenerateContentHashes(
 	};
 }
 
-function generateFinalHashes(
+async function generateFinalHashes(
 	renderedChunksByPlaceholder: Map<string, RenderedChunkWithPlaceholders>,
 	hashDependenciesByPlaceholder: Map<string, HashResult>,
 	bundle: OutputBundleWithPlaceholders
 ) {
 	const hashesByPlaceholder = new Map<string, string>();
 	for (const [placeholder, { fileName }] of renderedChunksByPlaceholder) {
-		let hash = createHash();
+		let hash = [];
 		const hashDependencyPlaceholders = new Set<string>([placeholder]);
 		for (const dependencyPlaceholder of hashDependencyPlaceholders) {
 			const { containedPlaceholders, contentHash } =
 				hashDependenciesByPlaceholder.get(dependencyPlaceholder)!;
-			hash.update(contentHash);
+			hash.push(contentHash);
 			for (const containedPlaceholder of containedPlaceholders) {
 				// When looping over a map, setting an entry only causes a new iteration if the key is new
 				hashDependencyPlaceholders.add(containedPlaceholder);
 			}
 		}
+		
+		hash = await createHash().update(hash.join(''));
+		
 		let finalFileName: string | undefined;
 		let finalHash: string | undefined;
 		do {
 			// In case of a hash collision, create a hash of the hash
 			if (finalHash) {
-				hash = createHash().update(finalHash);
+				hash = await createHash().update(finalHash);
 			}
 			finalHash = hash.digest('hex').slice(0, placeholder.length);
 			finalFileName = replaceSinglePlaceholder(fileName, placeholder, finalHash);
