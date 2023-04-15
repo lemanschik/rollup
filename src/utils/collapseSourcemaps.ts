@@ -6,15 +6,15 @@ import type {
 	SourceMapSegment,
 	WarningHandler
 } from '../rollup/types';
-import { error, errorSourcemapBroken } from './error';
+import { error, errorConflictingSourcemapSources, errorSourcemapBroken } from './error';
 import { basename, dirname, relative, resolve } from './path';
 
 class Source {
-	readonly content: string;
+	readonly content: string | null;
 	readonly filename: string;
 	isOriginal = true;
 
-	constructor(filename: string, content: string) {
+	constructor(filename: string, content: string | null) {
 		this.filename = filename;
 		this.content = content;
 	}
@@ -48,7 +48,7 @@ class Link {
 	traceMappings() {
 		const sources: string[] = [];
 		const sourceIndexMap = new Map<string, number>();
-		const sourcesContent: string[] = [];
+		const sourcesContent: (string | null)[] = [];
 		const names: string[] = [];
 		const nameIndexMap = new Map<string, number>();
 
@@ -84,9 +84,7 @@ class Link {
 					} else if (sourcesContent[sourceIndex] == null) {
 						sourcesContent[sourceIndex] = content;
 					} else if (content != null && sourcesContent[sourceIndex] !== content) {
-						return error({
-							message: `Multiple conflicting contents for sourcemap source ${filename}`
-						});
+						return error(errorConflictingSourcemapSources(filename));
 					}
 
 					const tracedSegment: SourceMapSegment = [segment[0], sourceIndex, line, column];
@@ -176,9 +174,7 @@ function getCollapsedSourcemap(
 ): Source | Link {
 	let source: Source | Link;
 
-	if (!originalSourcemap) {
-		source = new Source(id, originalCode);
-	} else {
+	if (originalSourcemap) {
 		const sources = originalSourcemap.sources;
 		const sourcesContent = originalSourcemap.sourcesContent || [];
 		const directory = dirname(id) || '.';
@@ -188,6 +184,8 @@ function getCollapsedSourcemap(
 			(source, index) => new Source(resolve(directory, sourceRoot, source), sourcesContent[index])
 		);
 		source = new Link(originalSourcemap, baseSources);
+	} else {
+		source = new Source(id, originalCode);
 	}
 	return sourcemapChain.reduce(linkMap, source);
 }

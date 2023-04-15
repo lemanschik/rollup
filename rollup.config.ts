@@ -1,19 +1,21 @@
-import { resolve } from 'node:path';
+import { exit } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
+import replace from '@rollup/plugin-replace';
+import terser from '@rollup/plugin-terser';
 import typescript from '@rollup/plugin-typescript';
 import type { Plugin, RollupOptions, WarningHandlerWithDefault } from 'rollup';
 import { string } from 'rollup-plugin-string';
-import { terser } from 'rollup-plugin-terser';
 import addCliEntry from './build-plugins/add-cli-entry';
+import { moduleAliases } from './build-plugins/aliases';
 import cleanBeforeWrite from './build-plugins/clean-before-write';
-import conditionalFsEventsImport from './build-plugins/conditional-fsevents-import';
-import copyTypes from './build-plugins/copy-types';
+import { copyBrowserTypes, copyNodeTypes } from './build-plugins/copy-types';
 import emitModulePackageFile from './build-plugins/emit-module-package-file';
 import esmDynamicImport from './build-plugins/esm-dynamic-import';
+import { fsEventsReplacement } from './build-plugins/fs-events-replacement';
 import getLicenseHandler from './build-plugins/generate-license-file';
 import getBanner from './build-plugins/get-banner';
 import replaceBrowserModules from './build-plugins/replace-browser-modules';
@@ -28,26 +30,17 @@ const onwarn: WarningHandlerWithDefault = warning => {
 	throw Object.assign(new Error(), warning);
 };
 
-const moduleAliases = {
-	entries: {
-		acorn: resolve('node_modules/acorn/dist/acorn.mjs'),
-		'help.md': resolve('cli/help.md'),
-		'package.json': resolve('package.json')
-	},
-	resolve: ['.js', '.json', '.md']
-};
-
 const treeshake = {
 	moduleSideEffects: false,
 	propertyReadSideEffects: false,
 	tryCatchDeoptimization: false
 };
 
-const nodePlugins: Plugin[] = [
+const nodePlugins: readonly Plugin[] = [
+	replace(fsEventsReplacement),
 	alias(moduleAliases),
 	nodeResolve(),
 	json(),
-	conditionalFsEventsImport(),
 	string({ include: '**/*.md' }),
 	commonjs({
 		ignoreTryCatch: false,
@@ -83,7 +76,6 @@ export default async function (
 			freeze: false,
 			generatedCode: 'es2015',
 			interop: 'default',
-			manualChunks: { rollup: ['src/node-entry.ts'] },
 			sourcemap: true
 		},
 		plugins: [
@@ -91,7 +83,7 @@ export default async function (
 			addCliEntry(),
 			esmDynamicImport(),
 			!command.configTest && collectLicenses(),
-			!command.configTest && copyTypes('rollup.d.ts')
+			!command.configTest && copyNodeTypes()
 		],
 		strictDeprecations: true,
 		treeshake
@@ -126,7 +118,7 @@ export default async function (
 				file: 'browser/dist/rollup.browser.js',
 				format: 'umd',
 				name: 'rollup',
-				plugins: [copyTypes('rollup.browser.d.ts')],
+				plugins: [copyBrowserTypes()],
 				sourcemap: true
 			},
 			{
@@ -146,7 +138,16 @@ export default async function (
 			terser({ module: true, output: { comments: 'some' } }),
 			collectLicensesBrowser(),
 			writeLicenseBrowser(),
-			cleanBeforeWrite('browser/dist')
+			cleanBeforeWrite('browser/dist'),
+			{
+				closeBundle() {
+					// On CI, MacOS runs sometimes do not close properly. This is a hack
+					// to fix this until the problem is understood.
+					console.log('Force quit.');
+					setTimeout(() => exit(0));
+				},
+				name: 'force-close'
+			}
 		],
 		strictDeprecations: true,
 		treeshake

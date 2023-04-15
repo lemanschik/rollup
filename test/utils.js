@@ -6,13 +6,13 @@ const {
 	readdirSync,
 	renameSync,
 	unlinkSync,
+	rmSync,
 	writeFileSync,
 	writeSync
 } = require('node:fs');
 const { basename, join } = require('node:path');
 const { platform, version } = require('node:process');
 const fixturify = require('fixturify');
-const { removeSync } = require('fs-extra');
 
 exports.wait = function wait(ms) {
 	return new Promise(fulfil => {
@@ -46,15 +46,21 @@ exports.compareError = function compareError(actual, expected) {
 
 exports.compareWarnings = function compareWarnings(actual, expected) {
 	assert.deepEqual(
-		actual.map(normaliseError),
-		expected.map(warning => {
-			if (warning.frame) {
-				warning.frame = deindent(warning.frame);
-			}
-			return warning;
-		})
+		actual.map(normaliseError).sort(sortWarnings),
+		expected
+			.map(warning => {
+				if (warning.frame) {
+					warning.frame = deindent(warning.frame);
+				}
+				return warning;
+			})
+			.sort(sortWarnings)
 	);
 };
+
+function sortWarnings(a, b) {
+	return a.message === b.message ? 0 : a.message < b.message ? -1 : 1;
+}
 
 function deindent(stringValue) {
 	return stringValue.slice(1).replace(/^\t+/gm, '').replace(/\s+$/gm, '').trim();
@@ -133,7 +139,10 @@ function runTestsInDirectory(directory, runTest) {
 		loadConfigAndRunTest(directory, runTest);
 	} else if (fileNames.length === 0) {
 		console.warn(`Removing empty test directory ${directory}`);
-		removeSync(directory);
+		rmSync(directory, {
+			force: true,
+			recursive: true
+		});
 	} else {
 		describe(basename(directory), () => {
 			for (const fileName of fileNames.filter(name => name[0] !== '.').sort()) {
@@ -147,7 +156,10 @@ function getFileNamesAndRemoveOutput(directory) {
 	try {
 		return readdirSync(directory).filter(fileName => {
 			if (fileName === '_actual') {
-				removeSync(join(directory, '_actual'));
+				rmSync(join(directory, '_actual'), {
+					force: true,
+					recursive: true
+				});
 				return false;
 			}
 			if (fileName === '_actual.js') {

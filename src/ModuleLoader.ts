@@ -30,7 +30,7 @@ import {
 	errorUnresolvedImport,
 	errorUnresolvedImportTreatedAsExternal
 } from './utils/error';
-import { promises as fs } from './utils/fs';
+import { readFile } from './utils/fs';
 import { doAssertionsDiffer, getAssertionsFromImportExpression } from './utils/parseAssertions';
 import { isAbsolute, isRelative, resolve } from './utils/path';
 import relativeId from './utils/relativeId';
@@ -56,6 +56,7 @@ export type ModuleLoaderResolveId = (
 type NormalizedResolveIdWithoutDefaults = Partial<PartialNull<ModuleOptions>> & {
 	external?: boolean | 'absolute';
 	id: string;
+	resolvedBy?: string;
 };
 
 type ResolveStaticDependencyPromise = Promise<readonly [source: string, resolvedId: ResolvedId]>;
@@ -131,16 +132,16 @@ export class ModuleLoader {
 					const existingIndexedModule = this.indexedEntryModules.find(
 						indexedModule => indexedModule.module === entryModule
 					);
-					if (!existingIndexedModule) {
-						this.indexedEntryModules.push({
-							index: firstEntryModuleIndex + index,
-							module: entryModule
-						});
-					} else {
+					if (existingIndexedModule) {
 						existingIndexedModule.index = Math.min(
 							existingIndexedModule.index,
 							firstEntryModuleIndex + index
 						);
+					} else {
+						this.indexedEntryModules.push({
+							index: firstEntryModuleIndex + index,
+							module: entryModule
+						});
 					}
 				}
 				this.indexedEntryModules.sort(({ index: indexA }, { index: indexB }) =>
@@ -259,7 +260,7 @@ export class ModuleLoader {
 		try {
 			source = await this.graph.fileOperationQueue.run(
 				async () =>
-					(await this.pluginDriver.hookFirst('load', [id])) ?? (await fs.readFile(id, 'utf8'))
+					(await this.pluginDriver.hookFirst('load', [id])) ?? (await readFile(id, 'utf8'))
 			);
 		} catch (error_: any) {
 			let message = `Could not load ${id}`;
@@ -541,7 +542,7 @@ export class ModuleLoader {
 				module,
 				typeof dynamicImport.argument === 'string'
 					? dynamicImport.argument
-					: dynamicImport.argument.esTreeNode,
+					: dynamicImport.argument.esTreeNode!,
 				module.id,
 				getAssertionsFromImportExpression(dynamicImport.node)
 			);
@@ -586,6 +587,7 @@ export class ModuleLoader {
 			meta: resolvedId.meta || {},
 			moduleSideEffects:
 				resolvedId.moduleSideEffects ?? this.hasModuleSideEffects(resolvedId.id, !!external),
+			resolvedBy: resolvedId.resolvedBy ?? 'rollup',
 			syntheticNamedExports: resolvedId.syntheticNamedExports ?? false
 		};
 	}
@@ -625,6 +627,7 @@ export class ModuleLoader {
 				id: source,
 				meta: {},
 				moduleSideEffects: this.hasModuleSideEffects(source, true),
+				resolvedBy: 'rollup',
 				syntheticNamedExports: false
 			};
 		} else if (resolvedId.external && resolvedId.syntheticNamedExports) {

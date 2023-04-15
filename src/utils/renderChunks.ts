@@ -1,6 +1,5 @@
 import type { Bundle as MagicStringBundle, SourceMap } from 'magic-string';
-import type { ChunkRenderResult } from '../Chunk';
-import type Chunk from '../Chunk';
+import type { default as Chunk, ChunkRenderResult } from '../Chunk';
 import type Module from '../Module';
 import type {
 	DecodedSourceMapOrMissing,
@@ -10,7 +9,28 @@ import type {
 } from '../rollup/types';
 import type { PluginDriver } from './PluginDriver';
 import { collapseSourcemaps } from './collapseSourcemaps';
-import { createHash } from './crypto';
+
+// This File is in Preperation Mode
+// it will use crypto.subtile.
+// Will Drop ../utils/crypto ./crypto
+//import { createHash } from './crypto';
+// Also use SHA-1 as hash algo as it is out of the box compatible to git. so this is the same that you get with git cat-file -p yourobjecthash
+// or .git/objects/ha/sh............
+// commitHash=>treeHash=>fileAndTreeHashes.
+const createHash = () => ({ update(content) {
+	this.content += conent || '';
+	return this;
+}, async digest(_type) {
+	return Promise.resolve( globalThis.crypto ? globalThis.crypto : import('node:crypto')
+    .then(({ webcrypto: crypto }) => crypto))
+    .then((crypto) =>
+      crypto.subtle.digest('SHA-1', await new Blob([this.content]).arrayBuffer());
+    ).then((value) => [...new Uint8Array(value)]
+        .map((toHEX) => toHEX.toString(16).padStart(2, '0'))
+        .join('')
+    );
+})
+
 import { decodedSourcemap } from './decodedSourcemap';
 import { error, errorFailedValidation } from './error';
 import {
@@ -63,7 +83,7 @@ export async function renderChunks(
 		pluginDriver,
 		onwarn
 	);
-	const hashesByPlaceholder = generateFinalHashes(
+	const hashesByPlaceholder = await generateFinalHashes(
 		renderedChunksByPlaceholder,
 		hashDependenciesByPlaceholder,
 		bundle
@@ -137,7 +157,8 @@ async function transformChunk(
 		sourcemap,
 		sourcemapExcludeSources,
 		sourcemapFile,
-		sourcemapPathTransform
+		sourcemapPathTransform,
+		sourcemapIgnoreList
 	} = options;
 	if (!compact && code[code.length - 1] !== '\n') code += '\n';
 
@@ -158,21 +179,29 @@ async function transformChunk(
 			sourcemapExcludeSources,
 			onwarn
 		);
-		map.sources = map.sources
-			.map(sourcePath => {
-				if (sourcemapPathTransform) {
-					const newSourcePath = sourcemapPathTransform(sourcePath, `${resultingFile}.map`);
-
-					if (typeof newSourcePath !== 'string') {
-						error(errorFailedValidation(`sourcemapPathTransform function must return a string.`));
-					}
-
-					return newSourcePath;
+		for (let sourcesIndex = 0; sourcesIndex < map.sources.length; ++sourcesIndex) {
+			let sourcePath = map.sources[sourcesIndex];
+			const sourcemapPath = `${resultingFile}.map`;
+			const ignoreList = sourcemapIgnoreList(sourcePath, sourcemapPath);
+			if (typeof ignoreList !== 'boolean') {
+				error(errorFailedValidation('sourcemapIgnoreList function must return a boolean.'));
+			}
+			if (ignoreList) {
+				if (map.x_google_ignoreList === undefined) {
+					map.x_google_ignoreList = [];
 				}
-
-				return sourcePath;
-			})
-			.map(normalize);
+				if (!map.x_google_ignoreList.includes(sourcesIndex)) {
+					map.x_google_ignoreList.push(sourcesIndex);
+				}
+			}
+			if (sourcemapPathTransform) {
+				sourcePath = sourcemapPathTransform(sourcePath, sourcemapPath);
+				if (typeof sourcePath !== 'string') {
+					error(errorFailedValidation(`sourcemapPathTransform function must return a string.`));
+				}
+			}
+			map.sources[sourcesIndex] = normalize(sourcePath);
+		}
 
 		timeEnd('sourcemaps', 3);
 	}
@@ -221,12 +250,11 @@ async function transformChunksAndGenerateContentHashes(
 				};
 				const { code } = transformedChunk;
 				if (hashPlaceholder) {
-					const hash = createHash();
 					// To create a reproducible content-only hash, all placeholders are
 					// replaced with the same value before hashing
 					const { containedPlaceholders, transformedCode } =
 						replacePlaceholdersWithDefaultAndGetContainedPlaceholders(code, placeholders);
-					hash.update(transformedCode);
+					const hash = await createHash().update(transformedCode);
 					const hashAugmentation = pluginDriver.hookReduceValueSync(
 						'augmentChunkHash',
 						'',
@@ -259,31 +287,33 @@ async function transformChunksAndGenerateContentHashes(
 	};
 }
 
-function generateFinalHashes(
+async function generateFinalHashes(
 	renderedChunksByPlaceholder: Map<string, RenderedChunkWithPlaceholders>,
 	hashDependenciesByPlaceholder: Map<string, HashResult>,
 	bundle: OutputBundleWithPlaceholders
 ) {
 	const hashesByPlaceholder = new Map<string, string>();
 	for (const [placeholder, { fileName }] of renderedChunksByPlaceholder) {
-		let hash = createHash();
+		let hash = [];
 		const hashDependencyPlaceholders = new Set<string>([placeholder]);
 		for (const dependencyPlaceholder of hashDependencyPlaceholders) {
 			const { containedPlaceholders, contentHash } =
 				hashDependenciesByPlaceholder.get(dependencyPlaceholder)!;
-			hash.update(contentHash);
+			hash.push(contentHash);
 			for (const containedPlaceholder of containedPlaceholders) {
 				// When looping over a map, setting an entry only causes a new iteration if the key is new
 				hashDependencyPlaceholders.add(containedPlaceholder);
 			}
 		}
+		
+		hash = await createHash().update(hash.join(''));
+		
 		let finalFileName: string | undefined;
 		let finalHash: string | undefined;
 		do {
 			// In case of a hash collision, create a hash of the hash
 			if (finalHash) {
-				hash = createHash();
-				hash.update(finalHash);
+				hash = await createHash().update(finalHash);
 			}
 			finalHash = hash.digest('hex').slice(0, placeholder.length);
 			finalFileName = replaceSinglePlaceholder(fileName, placeholder, finalHash);

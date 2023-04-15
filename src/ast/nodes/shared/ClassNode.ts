@@ -1,10 +1,6 @@
 import type { DeoptimizableEntity } from '../../DeoptimizableEntity';
 import type { HasEffectsContext, InclusionContext } from '../../ExecutionContext';
-import type {
-	NodeInteraction,
-	NodeInteractionCalled,
-	NodeInteractionWithThisArgument
-} from '../../NodeInteractions';
+import type { NodeInteraction, NodeInteractionCalled } from '../../NodeInteractions';
 import { INTERACTION_CALLED } from '../../NodeInteractions';
 import ChildScope from '../../scopes/ChildScope';
 import type Scope from '../../scopes/Scope';
@@ -37,20 +33,24 @@ export default class ClassNode extends NodeBase implements DeoptimizableEntity {
 		this.scope = new ChildScope(parentScope);
 	}
 
+	deoptimizeArgumentsOnInteractionAtPath(
+		interaction: NodeInteraction,
+		path: ObjectPath,
+		recursionTracker: PathTracker
+	): void {
+		this.getObjectEntity().deoptimizeArgumentsOnInteractionAtPath(
+			interaction,
+			path,
+			recursionTracker
+		);
+	}
+
 	deoptimizeCache(): void {
 		this.getObjectEntity().deoptimizeAllProperties();
 	}
 
 	deoptimizePath(path: ObjectPath): void {
 		this.getObjectEntity().deoptimizePath(path);
-	}
-
-	deoptimizeThisOnInteractionAtPath(
-		interaction: NodeInteractionWithThisArgument,
-		path: ObjectPath,
-		recursionTracker: PathTracker
-	): void {
-		this.getObjectEntity().deoptimizeThisOnInteractionAtPath(interaction, path, recursionTracker);
 	}
 
 	getLiteralValueAtPath(
@@ -89,9 +89,9 @@ export default class ClassNode extends NodeBase implements DeoptimizableEntity {
 	): boolean {
 		return interaction.type === INTERACTION_CALLED && path.length === 0
 			? !interaction.withNew ||
-					(this.classConstructor !== null
-						? this.classConstructor.hasEffectsOnInteractionAtPath(path, interaction, context)
-						: this.superClass?.hasEffectsOnInteractionAtPath(path, interaction, context)) ||
+					(this.classConstructor === null
+						? this.superClass?.hasEffectsOnInteractionAtPath(path, interaction, context)
+						: this.classConstructor.hasEffectsOnInteractionAtPath(path, interaction, context)) ||
 					false
 			: this.getObjectEntity().hasEffectsOnInteractionAtPath(path, interaction, context);
 	}

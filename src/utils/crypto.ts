@@ -1,3 +1,3 @@
 import { createHash as cryptoCreateHash, type Hash } from 'node:crypto';
-
-export const createHash = (): Hash => cryptoCreateHash('sha256');
+console.error('deprecated: ', import.meta.url, 'Use Web Crypto crypto.webcrypto.subtile'  )
+export const createHash = (): Hash => cryptoCreateHash('sha1');

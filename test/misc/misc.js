@@ -84,7 +84,7 @@ describe('misc', () => {
 						message:
 							'No name was provided for external module "lodash" in "output.globals" – guessing "_".',
 						names: ['_'],
-						url: 'https://rollupjs.org/guide/en/#outputglobals'
+						url: 'https://rollupjs.org/configuration-options/#output-globals'
 					}
 				]);
 			});
@@ -234,7 +234,7 @@ console.log(x);
 			]
 		});
 		const {
-			output: [main, feature, subfeature, subsubfeature]
+			output: [feature, subfeature, subsubfeature, main]
 		} = await bundle.generate({
 			entryFileNames: `[name]`,
 			chunkFileNames: `[name]`,

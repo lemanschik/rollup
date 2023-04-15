@@ -18,10 +18,13 @@ module.exports = {
 		'dist',
 		'perf',
 		'tmp',
+		'coverage',
 		'_tmp',
+		'cache',
 		'/test/*/samples/**/*.*',
 		'!/test/*/samples/**/_config.js',
-		'!/test/*/samples/**/rollup.config.js'
+		'!/test/*/samples/**/rollup.config.js',
+		'!.vitepress'
 	],
 	overrides: [
 		{
@@ -46,13 +49,26 @@ module.exports = {
 			rules: {
 				'sort-keys': 'off'
 			}
+		},
+		{
+			extends: [
+				'plugin:vue/vue3-essential',
+				'@vue/eslint-config-typescript/recommended',
+				'@vue/eslint-config-prettier'
+			],
+			files: ['*.vue']
+		},
+		{
+			files: ['docs/repl/examples/**/*.js'],
+			rules: {
+				'import/namespace': 'off',
+				'import/no-unresolved': 'off',
+				'no-undef': 'off',
+				'unicorn/prevent-abbreviations': 'off'
+			}
 		}
 	],
 	parser: '@typescript-eslint/parser',
-	parserOptions: {
-		ecmaVersion: 2018,
-		sourceType: 'module'
-	},
 	plugins: ['@typescript-eslint'],
 	rules: {
 		'@typescript-eslint/consistent-type-assertions': [
@@ -83,8 +99,8 @@ module.exports = {
 		'import/no-unresolved': [
 			'error',
 			{
-				// 'fsevents' is ony available on macOS, and not installed on linux/windows
-				ignore: ['fsevents', 'help.md', 'is-reference', 'package.json', 'types']
+				// 'fsevents' is only available on macOS, and not installed on linux/windows
+				ignore: ['fsevents', 'help.md', 'is-reference', 'package.json', 'types', 'examples.json']
 			}
 		],
 		'import/order': ['error', { alphabetize: { order: 'asc' } }],
@@ -106,6 +122,7 @@ module.exports = {
 		'unicorn/no-array-callback-reference': 'off',
 		'unicorn/no-array-reduce': 'off',
 		'unicorn/no-await-expression-member': 'off',
+		'unicorn/no-for-loop': 'off',
 		'unicorn/no-nested-ternary': 'off',
 		'unicorn/no-null': 'off',
 		'unicorn/no-this-assignment': 'off',
