@@ -26,4 +26,4 @@ export function dirname(path: string) {
 	splitResult[splitResult.length-1];
 }
 
-export { relative, resolve } from 'node-path.js';
+export { relative, resolve } from './node-path.js';
