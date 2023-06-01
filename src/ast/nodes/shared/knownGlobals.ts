@@ -10,6 +10,7 @@ import {
 	UNKNOWN_NON_ACCESSOR_PATH,
 	UNKNOWN_PATH
 } from '../../utils/PathTracker';
+import ArrayExpression from '../ArrayExpression';
 import type { LiteralValueOrUnknown } from './Expression';
 import { UnknownTruthyValue } from './Expression';
 
@@ -43,6 +44,14 @@ const IMPURE: ValueDescription = {
 	hasEffectsWhenCalled: returnTrue
 };
 
+const PURE_WITH_ARRAY: ValueDescription = {
+	deoptimizeArgumentsOnCall: doNothing,
+	getLiteralValue: getTruthyLiteralValue,
+	hasEffectsWhenCalled({ args }) {
+		return args.length > 1 && !(args[1] instanceof ArrayExpression);
+	}
+};
+
 // We use shortened variables to reduce file size here
 /* OBJECT */
 const O: GlobalDescription = {
@@ -60,14 +69,14 @@ const PF: GlobalDescription = {
 const MUTATES_ARG_WITHOUT_ACCESSOR: GlobalDescription = {
 	__proto__: null,
 	[ValueProperties]: {
-		deoptimizeArgumentsOnCall({ args: [firstArgument] }: NodeInteractionCalled) {
+		deoptimizeArgumentsOnCall({ args: [, firstArgument] }: NodeInteractionCalled) {
 			firstArgument?.deoptimizePath(UNKNOWN_PATH);
 		},
 		getLiteralValue: getTruthyLiteralValue,
 		hasEffectsWhenCalled({ args }, context) {
 			return (
-				args.length === 0 ||
-				args[0].hasEffectsOnInteractionAtPath(
+				args.length <= 1 ||
+				args[1].hasEffectsOnInteractionAtPath(
 					UNKNOWN_NON_ACCESSOR_PATH,
 					NODE_INTERACTION_UNKNOWN_ASSIGNMENT,
 					context
@@ -91,10 +100,16 @@ const PC: GlobalDescription = {
 	prototype: O
 };
 
+const PC_WITH_ARRAY = {
+	__proto__: null,
+	[ValueProperties]: PURE_WITH_ARRAY,
+	prototype: O
+};
+
 const ARRAY_TYPE: GlobalDescription = {
 	__proto__: null,
 	[ValueProperties]: PURE,
-	from: PF,
+	from: O,
 	of: PF,
 	prototype: O
 };
@@ -164,7 +179,7 @@ const knownGlobals: GlobalDescription = {
 	isNaN: PF,
 	isPrototypeOf: O,
 	JSON: O,
-	Map: PC,
+	Map: PC_WITH_ARRAY,
 	Math: {
 		__proto__: null,
 		[ValueProperties]: IMPURE,
@@ -237,7 +252,7 @@ const knownGlobals: GlobalDescription = {
 		isFrozen: PF,
 		isSealed: PF,
 		keys: PF,
-		fromEntries: PF,
+		fromEntries: O,
 		entries: PF,
 		prototype: O
 	},
@@ -260,7 +275,7 @@ const knownGlobals: GlobalDescription = {
 	ReferenceError: PC,
 	Reflect: O,
 	RegExp: PC,
-	Set: PC,
+	Set: PC_WITH_ARRAY,
 	SharedArrayBuffer: C,
 	String: {
 		__proto__: null,
@@ -300,8 +315,8 @@ const knownGlobals: GlobalDescription = {
 	unescape: PF,
 	URIError: PC,
 	valueOf: O,
-	WeakMap: PC,
-	WeakSet: PC,
+	WeakMap: PC_WITH_ARRAY,
+	WeakSet: PC_WITH_ARRAY,
 
 	// Additional globals shared by Node and Browser that are not strictly part of the language
 	clearInterval: C,

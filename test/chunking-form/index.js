@@ -1,5 +1,8 @@
 const { basename, resolve } = require('node:path');
-const { chdir } = require('node:process');
+/**
+ * @type {import('../../src/rollup/types')} Rollup
+ */
+// @ts-expect-error not included in types
 const { rollup } = require('../../dist/rollup');
 const { runTestSuiteWithSamples, assertDirectoriesAreEqual } = require('../utils.js');
 
@@ -20,7 +23,7 @@ runTestSuiteWithSamples('chunking form', resolve(__dirname, 'samples'), (directo
 
 			for (const format of FORMATS) {
 				it('generates ' + format, async () => {
-					chdir(directory);
+					process.chdir(directory);
 					bundle =
 						bundle ||
 						(await rollup({
@@ -63,6 +66,7 @@ async function generateAndTestBundle(bundle, outputOptions, expectedDirectory, c
 	if (outputOptions.format === 'amd' && config.runAmd) {
 		try {
 			const exports = await new Promise((resolve, reject) => {
+				// @ts-expect-error global
 				global.assert = require('node:assert');
 				const requirejs = require('requirejs');
 				requirejs.config({ baseUrl: outputOptions.dir });
@@ -73,7 +77,9 @@ async function generateAndTestBundle(bundle, outputOptions, expectedDirectory, c
 			}
 		} finally {
 			delete require.cache[require.resolve('requirejs')];
+			// @ts-expect-error global
 			delete global.requirejsVars;
+			// @ts-expect-error global
 			delete global.assert;
 		}
 	}

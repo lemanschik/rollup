@@ -36,6 +36,12 @@ module.exports = {
 			}
 		},
 		{
+			files: ['./*.ts', 'cli/**/*.ts'],
+			rules: {
+				'unicorn/no-process-exit': 'off'
+			}
+		},
+		{
 			files: ['*.js', 'cli/**/*.ts'],
 			rules: {
 				'@typescript-eslint/no-var-requires': 'off'
@@ -65,6 +71,12 @@ module.exports = {
 				'import/no-unresolved': 'off',
 				'no-undef': 'off',
 				'unicorn/prevent-abbreviations': 'off'
+			}
+		},
+		{
+			files: ['test/**/_config.js'],
+			rules: {
+				'no-undef': 'off'
 			}
 		}
 	],
@@ -127,9 +139,11 @@ module.exports = {
 		'unicorn/no-null': 'off',
 		'unicorn/no-this-assignment': 'off',
 		'unicorn/no-useless-undefined': 'off',
+		'unicorn/prefer-at': 'off',
 		'unicorn/prefer-code-point': 'off',
 		'unicorn/prefer-math-trunc': 'off',
 		'unicorn/prefer-number-properties': 'off',
+		'unicorn/prefer-string-replace-all': 'off',
 		'unicorn/prefer-top-level-await': 'off'
 	}
 };

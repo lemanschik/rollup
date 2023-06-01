@@ -401,6 +401,17 @@ export default class Module {
 		return error(properties);
 	}
 
+	// sum up the length of all ast nodes that are included
+	estimateSize(): number {
+		let size = 0;
+		for (const node of this.ast!.body) {
+			if (node.included) {
+				size += node.end - node.start;
+			}
+		}
+		return size;
+	}
+
 	getAllExportNames(): Set<string> {
 		if (this.allExportNames) {
 			return this.allExportNames;
@@ -716,11 +727,42 @@ export default class Module {
 		this.includeAllExports(false);
 	}
 
+	includeExportsByNames(names: readonly string[]): void {
+		if (!this.isExecuted) {
+			markModuleAndImpureDependenciesAsExecuted(this);
+			this.graph.needsTreeshakingPass = true;
+		}
+
+		let includeNamespaceMembers = false;
+
+		for (const name of names) {
+			const variable = this.getVariableForExportName(name)[0];
+			if (variable) {
+				variable.deoptimizePath(UNKNOWN_PATH);
+				if (!variable.included) {
+					this.includeVariable(variable);
+				}
+			}
+
+			if (!this.exports.has(name) && !this.reexportDescriptions.has(name)) {
+				includeNamespaceMembers = true;
+			}
+		}
+
+		if (includeNamespaceMembers) {
+			this.namespace.setMergedNamespaces(this.includeAndGetAdditionalMergedNamespaces());
+		}
+	}
+
 	isIncluded(): boolean | null {
 		// Modules where this.ast is missing have been loaded via this.load and are
 		// not yet fully processed, hence they cannot be included.
 		return (
-			this.ast && (this.ast.included || this.namespace.included || this.importedFromNotTreeshaken)
+			this.ast &&
+			(this.ast.included ||
+				this.namespace.included ||
+				this.importedFromNotTreeshaken ||
+				this.exportShimVariable.included)
 		);
 	}
 
@@ -1218,9 +1260,19 @@ export default class Module {
 				resolution: string | Module | ExternalModule | undefined;
 			}
 		).resolution;
+
 		if (resolution instanceof Module) {
 			resolution.includedDynamicImporters.push(this);
-			resolution.includeAllExports(true);
+
+			const importedNames = this.options.treeshake
+				? node.getDeterministicImportedNames()
+				: undefined;
+
+			if (importedNames) {
+				resolution.includeExportsByNames(importedNames);
+			} else {
+				resolution.includeAllExports(true);
+			}
 		}
 	}
 
